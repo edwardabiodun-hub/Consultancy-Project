@@ -38,7 +38,7 @@ test("renders every primary route with unique substantive content", async () => 
     ["/diagnostic", /10 business days/],
     ["/how-i-help", /Executive visibility/],
     ["/founder-resources", /Build a Business That Runs Without You/],
-    ["/about", /Business outcomes before technology/],
+    ["/about", /The perspective behind the work/],
     ["/contact", /Primary operational dependency/],
   ]);
   for (const [path, expected] of routes) {
@@ -46,6 +46,21 @@ test("renders every primary route with unique substantive content", async () => 
     assert.equal(response.status, 200, path);
     assert.match(await response.text(), expected, path);
   }
+});
+
+test("renders the human-led About Eddie page with professional proof", async () => {
+  const response = await request("/about");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /Clearer decisions\. Stronger operating systems\. Less dependence on one person\./);
+  assert.match(html, /src="\/edward-abiodun\.png"/);
+  assert.match(html, /alt="Edward Abiodun"/);
+  assert.match(html, /linkedin\.com\/in\/edward-abiodun-09600a10/);
+  assert.match(html, /Christoph Brand/);
+  assert.match(html, /Christian Bischof/);
+  assert.match(html, /does not use confidential employer information/i);
+  assert.match(html, /Start a focused conversation/);
+  assert.match(html, /See the diagnostic/);
 });
 
 test("contact endpoint rejects invalid inquiries", async () => {
