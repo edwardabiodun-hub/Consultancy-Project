@@ -16,7 +16,7 @@ const score = {
 const answers = {
   employeeBand: "20-49", managerBand: "3-5", revenueBand: "3m-10m",
   role: "Founder", coreSystemCount: "twoOrMore", organizationShape: "multipleTeams",
-  relationshipLedByOwner: true, restrictedMarket: false, scored: {}, capacity: { source: "none" },
+  relationshipLedByOwner: true, restrictedMarket: false, scored: {}, capacity: { source: "none", activities: [] },
 };
 
 test("high dependency and sufficient scale route to diagnostic", () => {

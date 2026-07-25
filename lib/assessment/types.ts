@@ -17,15 +17,30 @@ export type ContextAnswers = {
   restrictedMarket: boolean;
 };
 
+export type CapacityCategory = "owner" | "reporting" | "rework";
+
+type CapacityActivityBase = {
+  activityId: string;
+  hoursPerOccurrence: number;
+  occurrencesPerYear: number;
+  hourlyCost: number;
+};
+
+export type OwnerCapacityActivity = CapacityActivityBase & {
+  category: "owner";
+  people?: 1;
+};
+
+export type TeamCapacityActivity = CapacityActivityBase & {
+  category: "reporting" | "rework";
+  people: number;
+};
+
+export type CapacityActivity = OwnerCapacityActivity | TeamCapacityActivity;
+
 export type CapacityInputs = {
   source: "none" | "banded" | "exact";
-  exclusivity: {
-    ownerExcludedFromTeam: boolean;
-    reportingCorrectionsExcludedFromRework: boolean;
-  };
-  owner?: { hoursPerOccurrence: number; occurrencesPerYear: number; hourlyCost: number };
-  reporting?: { people: number; hoursPerOccurrence: number; occurrencesPerYear: number; hourlyCost: number };
-  rework?: { people: number; hoursPerOccurrence: number; occurrencesPerYear: number; hourlyCost: number };
+  activities: CapacityActivity[];
 };
 
 export type AssessmentAnswers = ContextAnswers & {

@@ -1,8 +1,8 @@
-import type { CapacityInputs } from "./types";
+import type { CapacityActivity, CapacityCategory, CapacityInputs } from "./types";
 
-type Category = "owner" | "reporting" | "rework";
-type CapacityItem = NonNullable<CapacityInputs[Category]>;
+type Category = CapacityCategory;
 const CATEGORIES: Category[] = ["owner", "reporting", "rework"];
+const CLASSIFICATION_ASSUMPTION = "Each activity is assigned to exactly one category; reporting corrections are classified as reporting or rework, never both.";
 
 export type CapacityResult = {
   confidence: "high" | "medium" | "low";
@@ -16,64 +16,74 @@ export type CapacityResult = {
 const isValidNonNegativeNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-const isCompleteCapacityItem = (category: Category, item: unknown): item is CapacityItem => {
-  if (!item || typeof item !== "object") return false;
-  const candidate = item as Record<string, unknown>;
-  const valuesAreValid = ["hoursPerOccurrence", "occurrencesPerYear", "hourlyCost"]
-    .every((key) => isValidNonNegativeNumber(candidate[key]));
-  return valuesAreValid && (category === "owner"
-    || (Number.isInteger(candidate.people) && (candidate.people as number) > 0));
+const isCategory = (value: unknown): value is Category =>
+  typeof value === "string" && CATEGORIES.includes(value as Category);
+
+const isCompleteActivity = (activity: unknown): activity is CapacityActivity => {
+  if (!activity || typeof activity !== "object") return false;
+  const candidate = activity as Record<string, unknown>;
+  const valuesAreValid = typeof candidate.activityId === "string" && candidate.activityId.trim().length > 0
+    && isCategory(candidate.category)
+    && ["hoursPerOccurrence", "occurrencesPerYear", "hourlyCost"]
+      .every((key) => isValidNonNegativeNumber(candidate[key]));
+  if (!valuesAreValid) return false;
+  return candidate.category === "owner"
+    ? candidate.people === undefined || candidate.people === 1
+    : Number.isInteger(candidate.people) && (candidate.people as number) > 0;
+};
+
+const emptyGrossHours = (): CapacityResult["grossHours"] => ({ owner: 0, reporting: 0, rework: 0, total: 0 });
+
+const unavailable = (grossHours: CapacityResult["grossHours"], assumptions: string[]): CapacityResult => ({
+  confidence: "low",
+  estimateType: "unavailable",
+  grossHours,
+  recoverableHours: null,
+  annualValue: null,
+  assumptions,
+});
+
+const activityLabel = (activity: unknown, index: number): string => {
+  if (!activity || typeof activity !== "object") return `entry ${index + 1}`;
+  const category = (activity as Record<string, unknown>).category;
+  return isCategory(category) ? category : `entry ${index + 1}`;
 };
 
 export function calculateCapacity(input: CapacityInputs): CapacityResult {
-  const categories = CATEGORIES
-    .map((key) => [key, input[key]] as const)
-    .filter((entry): entry is [Category, CapacityItem] => isCompleteCapacityItem(entry[0], entry[1]));
-  const grossHours: CapacityResult["grossHours"] = { owner: 0, reporting: 0, rework: 0, total: 0 };
+  const activities: unknown[] = Array.isArray(input.activities) ? input.activities : [];
+  const activityIds = activities
+    .map((activity) => activity && typeof activity === "object" ? (activity as Record<string, unknown>).activityId : undefined)
+    .filter((activityId): activityId is string => typeof activityId === "string" && activityId.trim().length > 0);
+  const duplicateIds = [...new Set(activityIds.filter((activityId, index) => activityIds.indexOf(activityId) !== index))];
+  if (duplicateIds.length) {
+    return unavailable(emptyGrossHours(), [
+      `Duplicate activity ID${duplicateIds.length === 1 ? "" : "s"} rejected: ${duplicateIds.join(", ")}.`,
+      CLASSIFICATION_ASSUMPTION,
+    ]);
+  }
+
+  const validActivities = activities.filter(isCompleteActivity);
+  const exclusions = activities.flatMap((activity, index) =>
+    isCompleteActivity(activity) ? [] : [`Invalid capacity activity for ${activityLabel(activity, index)} was excluded.`],
+  );
+  const grossHours = emptyGrossHours();
   let grossValue = 0;
 
-  for (const [key, item] of categories) {
-    const people = "people" in item ? item.people : 1;
-    const hours = people * item.hoursPerOccurrence * item.occurrencesPerYear;
-    grossHours[key] = hours;
+  for (const activity of validActivities) {
+    const people = activity.category === "owner" ? 1 : activity.people;
+    const hours = people * activity.hoursPerOccurrence * activity.occurrencesPerYear;
+    grossHours[activity.category] += hours;
     grossHours.total += hours;
-    grossValue += hours * item.hourlyCost;
+    grossValue += hours * activity.hourlyCost;
   }
 
-  const exclusions = CATEGORIES.flatMap((category) => {
-    const item = input[category];
-    if (item === undefined) return [`Missing capacity input for ${category} was excluded.`];
-    return isCompleteCapacityItem(category, item) ? [] : [`Invalid capacity input for ${category} was excluded.`];
-  });
-
-  if (categories.length < 2 || input.source === "none") {
-    return {
-      confidence: "low",
-      estimateType: "unavailable",
-      grossHours,
-      recoverableHours: null,
-      annualValue: null,
-      assumptions: ["At least two complete eligible capacity categories are required.", ...exclusions],
-    };
-  }
-
-  const classificationFailures = [
-    !input.exclusivity?.ownerExcludedFromTeam
-      ? "Owner time must be excluded from team reporting and rework."
-      : null,
-    !input.exclusivity?.reportingCorrectionsExcludedFromRework
-      ? "Reporting corrections must be excluded from rework."
-      : null,
-  ].filter((failure): failure is string => Boolean(failure));
-  if (classificationFailures.length) {
-    return {
-      confidence: "low",
-      estimateType: "unavailable",
-      grossHours,
-      recoverableHours: null,
-      annualValue: null,
-      assumptions: classificationFailures,
-    };
+  const populatedCategories = CATEGORIES.filter((category) => validActivities.some((activity) => activity.category === category));
+  if (populatedCategories.length < 2 || input.source === "none") {
+    return unavailable(grossHours, [
+      "At least two complete eligible capacity categories are required.",
+      ...exclusions,
+      CLASSIFICATION_ASSUMPTION,
+    ]);
   }
 
   const factors = input.source === "exact" ? [0.50, 0.70] : [0.35, 0.55];
@@ -89,6 +99,9 @@ export function calculateCapacity(input: CapacityInputs): CapacityResult {
       low: Math.round(grossValue * factors[0]),
       high: Math.round(grossValue * factors[1]),
     },
-    assumptions: [`Applied a ${factors[0] * 100}% to ${factors[1] * 100}% realization range.`],
+    assumptions: [
+      `Applied a ${factors[0] * 100}% to ${factors[1] * 100}% realization range.`,
+      CLASSIFICATION_ASSUMPTION,
+    ],
   };
 }

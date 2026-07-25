@@ -17,7 +17,7 @@ const answersAt = (value, contextOverrides = {}) => {
         .filter((q) => q.required || q.appliesWhen?.(answerContext))
         .map((q) => [q.id, value]),
     ),
-    capacity: { source: "none" },
+    capacity: { source: "none", activities: [] },
   };
 };
 const assertCoverage = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-12);

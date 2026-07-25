@@ -2,36 +2,46 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateCapacity } from "../../lib/assessment/capacity.ts";
 
-test("exact inputs for two categories produce high-confidence calculated range", () => {
-  const result = calculateCapacity({
-    source: "exact",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-    reporting: { people: 2, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
-  });
+const owner = {
+  activityId: "owner-approvals",
+  category: "owner",
+  hoursPerOccurrence: 4,
+  occurrencesPerYear: 12,
+  hourlyCost: 100,
+};
+
+const reporting = {
+  activityId: "monthly-reporting",
+  category: "reporting",
+  people: 2,
+  hoursPerOccurrence: 3,
+  occurrencesPerYear: 12,
+  hourlyCost: 50,
+};
+
+test("exact inputs for two exclusive activities produce high-confidence calculated range", () => {
+  const result = calculateCapacity({ source: "exact", activities: [owner, reporting] });
   assert.equal(result.confidence, "high");
   assert.equal(result.estimateType, "calculated");
   assert.deepEqual(result.grossHours, { owner: 48, reporting: 72, rework: 0, total: 120 });
   assert.deepEqual(result.recoverableHours, { low: 60, high: 84 });
   assert.deepEqual(result.annualValue, { low: 4200, high: 5880 });
+  assert.ok(result.assumptions.some((assumption) => /exactly one category/i.test(assumption)));
 });
 
-test("one eligible category does not produce a financial estimate", () => {
-  const result = calculateCapacity({
-    source: "exact",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-  });
+test("one eligible activity does not produce a financial estimate", () => {
+  const result = calculateCapacity({ source: "exact", activities: [owner] });
   assert.equal(result.confidence, "low");
   assert.equal(result.annualValue, null);
 });
 
-test("banded inputs use the directional 35 to 55 percent realization range", () => {
+test("banded activities use the directional 35 to 55 percent realization range", () => {
   const result = calculateCapacity({
     source: "banded",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 10, occurrencesPerYear: 10, hourlyCost: 100 },
-    reporting: { people: 1, hoursPerOccurrence: 10, occurrencesPerYear: 10, hourlyCost: 100 },
+    activities: [
+      { ...owner, hoursPerOccurrence: 10, occurrencesPerYear: 10 },
+      { ...reporting, people: 1, hoursPerOccurrence: 10, occurrencesPerYear: 10, hourlyCost: 100 },
+    ],
   });
   assert.equal(result.confidence, "medium");
   assert.equal(result.estimateType, "directional");
@@ -39,73 +49,77 @@ test("banded inputs use the directional 35 to 55 percent realization range", () 
   assert.deepEqual(result.annualValue, { low: 7000, high: 11000 });
 });
 
-test("ignored non-capacity entries never create a financial estimate", () => {
+test("an excluded opportunity category never creates a financial estimate", () => {
   const result = calculateCapacity({
     source: "exact",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-    opportunity: { hoursPerOccurrence: 10, occurrencesPerYear: 12, hourlyCost: 100 },
+    activities: [
+      owner,
+      { ...reporting, activityId: "opportunity", category: "opportunity" },
+    ],
   });
   assert.equal(result.annualValue, null);
   assert.deepEqual(result.grossHours, { owner: 48, reporting: 0, rework: 0, total: 48 });
 });
 
-test("an incomplete eligible category does not qualify for monetization", () => {
+test("an incomplete team activity does not qualify for monetization", () => {
   const result = calculateCapacity({
     source: "exact",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-    reporting: { hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
+    activities: [owner, { ...reporting, people: undefined }],
   });
   assert.equal(result.annualValue, null);
   assert.deepEqual(result.grossHours, { owner: 48, reporting: 0, rework: 0, total: 48 });
 });
 
-test("owner time cannot be counted in both owner and team reporting", () => {
+test("the same activity ID in owner, reporting, and rework rejects the entire estimate", () => {
   const result = calculateCapacity({
     source: "exact",
-    exclusivity: { ownerExcludedFromTeam: false, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-    reporting: { people: 2, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
+    activities: [
+      { ...owner, activityId: "duplicate" },
+      { ...reporting, activityId: "duplicate" },
+      { ...reporting, activityId: "duplicate", category: "rework" },
+    ],
   });
+  assert.equal(result.confidence, "low");
+  assert.equal(result.recoverableHours, null);
   assert.equal(result.annualValue, null);
-  assert.ok(result.assumptions.some((assumption) => /owner.*team/i.test(assumption)));
+  assert.ok(result.assumptions.some((assumption) => /duplicate activity ID/i.test(assumption)));
 });
 
-test("reporting corrections cannot be counted in both reporting and rework", () => {
+test("distinct activity IDs with identical values remain independently eligible", () => {
   const result = calculateCapacity({
     source: "exact",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: false },
-    reporting: { people: 2, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
-    rework: { people: 2, hoursPerOccurrence: 2, occurrencesPerYear: 12, hourlyCost: 50 },
+    activities: [
+      { ...reporting, activityId: "reporting-corrections" },
+      { ...reporting, activityId: "rework-corrections", category: "rework" },
+    ],
   });
-  assert.equal(result.annualValue, null);
-  assert.ok(result.assumptions.some((assumption) => /reporting.*rework/i.test(assumption)));
+  assert.equal(result.confidence, "high");
+  assert.deepEqual(result.grossHours, { owner: 0, reporting: 72, rework: 72, total: 144 });
+  assert.deepEqual(result.annualValue, { low: 3600, high: 5040 });
 });
 
-test("missing overlap attestations cannot unlock a financial estimate", () => {
+test("owner activities with people other than one are invalid", () => {
   const result = calculateCapacity({
     source: "exact",
-    owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-    reporting: { people: 2, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
+    activities: [{ ...owner, people: 2 }, reporting],
   });
   assert.equal(result.annualValue, null);
-  assert.ok(result.assumptions.some((assumption) => /owner.*team/i.test(assumption)));
-  assert.ok(result.assumptions.some((assumption) => /reporting.*rework/i.test(assumption)));
+  assert.ok(result.assumptions.some((assumption) => /invalid.*owner/i.test(assumption)));
 });
 
-test("zero hours, frequency, and cost remain valid capacity inputs", () => {
+test("zero hours, frequency, and cost remain valid activity inputs", () => {
   const result = calculateCapacity({
     source: "exact",
-    exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-    owner: { hoursPerOccurrence: 0, occurrencesPerYear: 0, hourlyCost: 0 },
-    reporting: { people: 1, hoursPerOccurrence: 0, occurrencesPerYear: 0, hourlyCost: 0 },
+    activities: [
+      { ...owner, hoursPerOccurrence: 0, occurrencesPerYear: 0, hourlyCost: 0 },
+      { ...reporting, people: 1, hoursPerOccurrence: 0, occurrencesPerYear: 0, hourlyCost: 0 },
+    ],
   });
   assert.equal(result.estimateType, "calculated");
   assert.deepEqual(result.annualValue, { low: 0, high: 0 });
 });
 
-test("invalid capacity numbers do not count toward the two-category precision gate", () => {
+test("invalid activity numbers do not count toward the two-category precision gate", () => {
   const invalidReporting = [
     { people: 0, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
     { people: 1.5, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
@@ -122,12 +136,10 @@ test("invalid capacity numbers do not count toward the two-category precision ga
     { people: 1, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: Number.POSITIVE_INFINITY },
   ];
 
-  for (const reporting of invalidReporting) {
+  for (const values of invalidReporting) {
     const result = calculateCapacity({
       source: "exact",
-      exclusivity: { ownerExcludedFromTeam: true, reportingCorrectionsExcludedFromRework: true },
-      owner: { hoursPerOccurrence: 4, occurrencesPerYear: 12, hourlyCost: 100 },
-      reporting,
+      activities: [owner, { ...reporting, ...values }],
     });
     assert.equal(result.annualValue, null);
     assert.deepEqual(result.grossHours, { owner: 48, reporting: 0, rework: 0, total: 48 });
