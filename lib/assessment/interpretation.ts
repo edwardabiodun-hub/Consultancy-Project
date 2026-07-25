@@ -26,6 +26,8 @@ const LIBRARY: Record<ComponentId, Priority> = {
   },
 };
 
+const SUFFICIENT_EMPLOYEE_BANDS = new Set(["10-49", "20-49"]);
+
 export function interpretAssessment(score: ScoreResult, answers: AssessmentAnswers): AssessmentInterpretation {
   const ranked = (Object.entries(score.components) as [ComponentId, ScoreResult["components"][ComponentId]][])
     .sort((a, b) => (a[1].score ?? 101) - (b[1].score ?? 101));
@@ -37,9 +39,9 @@ export function interpretAssessment(score: ScoreResult, answers: AssessmentAnswe
 
   const route: LeadRoute = answers.restrictedMarket
     ? "restricted"
-    : score.overall !== null && score.overall < 65 && !["1-4", "5-9"].includes(answers.employeeBand)
+    : score.category === "highDependency" && SUFFICIENT_EMPLOYEE_BANDS.has(answers.employeeBand)
       ? "diagnostic"
-      : score.overall !== null && score.overall >= 80
+      : score.category === "strong"
         ? "insights"
         : "nurture";
 

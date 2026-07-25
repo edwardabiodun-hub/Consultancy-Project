@@ -44,3 +44,25 @@ test("strong assessments route to insights when the market is unrestricted", () 
   }, answers);
   assert.equal(result.route, "insights");
 });
+
+test("routing follows category and recognized employee scale only", () => {
+  const routes = [
+    { category: "developing", overall: 42, employeeBand: "20-49", restrictedMarket: false, expected: "nurture" },
+    { category: "emerging", overall: 42, employeeBand: "20-49", restrictedMarket: false, expected: "nurture" },
+    { category: "incomplete", overall: 42, employeeBand: "20-49", restrictedMarket: false, expected: "nurture" },
+    { category: "highDependency", overall: 42, employeeBand: "5-9", restrictedMarket: false, expected: "nurture" },
+    { category: "highDependency", overall: 42, employeeBand: "", restrictedMarket: false, expected: "nurture" },
+    { category: "highDependency", overall: 42, employeeBand: "not-a-band", restrictedMarket: false, expected: "nurture" },
+    { category: "highDependency", overall: 42, employeeBand: "10-49", restrictedMarket: false, expected: "diagnostic" },
+    { category: "strong", overall: null, employeeBand: "5-9", restrictedMarket: false, expected: "insights" },
+    { category: "strong", overall: 80, employeeBand: "20-49", restrictedMarket: true, expected: "restricted" },
+  ];
+
+  for (const entry of routes) {
+    const result = interpretAssessment(
+      { ...score, overall: entry.overall, category: entry.category },
+      { ...answers, employeeBand: entry.employeeBand, restrictedMarket: entry.restrictedMarket },
+    );
+    assert.equal(result.route, entry.expected);
+  }
+});

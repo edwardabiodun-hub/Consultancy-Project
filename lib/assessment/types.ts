@@ -19,6 +19,10 @@ export type ContextAnswers = {
 
 export type CapacityInputs = {
   source: "none" | "banded" | "exact";
+  exclusivity: {
+    ownerExcludedFromTeam: boolean;
+    reportingCorrectionsExcludedFromRework: boolean;
+  };
   owner?: { hoursPerOccurrence: number; occurrencesPerYear: number; hourlyCost: number };
   reporting?: { people: number; hoursPerOccurrence: number; occurrencesPerYear: number; hourlyCost: number };
   rework?: { people: number; hoursPerOccurrence: number; occurrencesPerYear: number; hourlyCost: number };
