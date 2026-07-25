@@ -1,3 +1,31 @@
-import { PageHero } from "../../components/SiteParts"; import ContactForm from "./ContactForm";
-export const metadata={title:"Contact",description:"Request an Owner Independence Diagnostic or ask a focused question."};
-export default function Contact(){return <><PageHero eyebrow="Contact" title="Describe what keeps coming back to you.">Share the recurring bottleneck, what you want to change, and enough context to assess whether the diagnostic is a fit.</PageHero><div className="content shell contact-grid"><aside><h2>What happens next</h2><ol><li>I review the operating context.</li><li>I respond within two business days.</li><li>If there is a potential fit, we schedule a focused conversation.</li></ol><p>Your information is used only to respond to this inquiry.</p></aside><ContactForm/></div></>}
+import { PageHero } from "../../components/SiteParts";
+import ContactForm from "./ContactForm";
+
+export const metadata = {
+  title: "Start a Conversation",
+  description: "Discuss a recurring owner dependency and determine whether a Business Independence Diagnostic is appropriate.",
+};
+
+export default function Contact() {
+  return (
+    <>
+      <PageHero eyebrow="Start a conversation" title="Describe what keeps coming back to you.">
+        Share the recurring dependency, its operating context, and what you want to change. The first
+        conversation determines whether the Business Independence Diagnostic is an appropriate next step.
+      </PageHero>
+      <div className="content shell contact-grid">
+        <aside>
+          <h2>What happens next</h2>
+          <ol>
+            <li>I review the operating context and qualification information.</li>
+            <li>I respond within two business days.</li>
+            <li>If there is a potential fit, we schedule a focused discovery conversation.</li>
+            <li>Scope and investment are confirmed only after that conversation.</li>
+          </ol>
+          <p>Your information is used only to evaluate and respond to this inquiry.</p>
+        </aside>
+        <ContactForm />
+      </div>
+    </>
+  );
+}

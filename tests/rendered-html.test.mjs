@@ -19,7 +19,7 @@ test("renders the founder-independence homepage and six-page navigation", async 
   const response = await request("/");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /Build a business that runs on systems/);
+  assert.match(html, /Build a business that can grow/);
   assert.match(html, /Decision Margin/);
   for (const href of [
     "/diagnostic",
@@ -36,10 +36,10 @@ test("renders the founder-independence homepage and six-page navigation", async 
 test("renders every primary route with unique substantive content", async () => {
   const routes = new Map([
     ["/diagnostic", /10 business days/],
-    ["/how-i-help", /Executive visibility/],
+    ["/how-i-help", /Improve executive decisions/],
     ["/founder-resources", /Build a Business That Runs Without You/],
     ["/about", /The perspective behind the work/],
-    ["/contact", /Primary operational dependency/],
+    ["/contact", /Decisions or operational dependencies/],
   ]);
   for (const [path, expected] of routes) {
     const response = await request(path);
@@ -61,6 +61,58 @@ test("renders the human-led About Eddie page with professional proof", async () 
   assert.match(html, /does not use confidential employer information/i);
   assert.match(html, /Start a focused conversation/);
   assert.match(html, /See the diagnostic/);
+});
+
+test("renders the premium advisory positioning and staged client journey", async () => {
+  const response = await request("/");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /grow without routing every important decision through the owner/i);
+  assert.match(html, /Reduce Owner Dependency/);
+  assert.match(html, /Improve Executive Decisions/);
+  assert.match(html, /Automate Manual Operations/);
+  assert.match(html, /Diagnose/);
+  assert.match(html, /Build/);
+  assert.match(html, /Sustain/);
+  assert.match(html, /continuation paths/i);
+  assert.doesNotMatch(html, /\$3,500|fixed-scope pilot|three pilot clients/i);
+});
+
+test("renders a defensible two-week Business Independence Diagnostic", async () => {
+  const response = await request("/diagnostic");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /In two weeks, identify where your business still depends on you/i);
+  assert.match(html, /estimate the operational cost/i);
+  assert.match(html, /Investment is confirmed after an initial discovery conversation/i);
+  assert.match(html, /Founder intervention time/);
+  assert.match(html, /Decision and approval delays/);
+  assert.match(html, /available when the findings justify/i);
+  assert.doesNotMatch(html, /\$3,500|fixed-scope pilot|three pilot clients/i);
+});
+
+test("renders qualification fields for a focused discovery conversation", async () => {
+  const response = await request("/contact");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  for (const field of ["managerCount", "ownerHours", "reportingMaturity", "timeframe"]) {
+    assert.match(html, new RegExp(`name="${field}"`));
+  }
+  assert.match(html, /Discuss your business dependency/);
+});
+
+test("uses the new advisory naming across supporting routes", async () => {
+  for (const path of [
+    "/about",
+    "/founder-resources",
+    "/founder-resources/business-that-lives-in-your-head",
+    "/contact/thank-you",
+  ]) {
+    const response = await request(path);
+    assert.equal(response.status, 200, path);
+    const html = await response.text();
+    assert.doesNotMatch(html, /Owner Independence Diagnostic|Explore Founder Resources/i, path);
+  }
 });
 
 test("contact endpoint rejects invalid inquiries", async () => {
@@ -85,6 +137,10 @@ test("contact endpoint does not claim delivery when email is not configured", as
       email: "eddie@example.com",
       company: "Example Co",
       role: "Founder",
+      managerCount: "3-5",
+      ownerHours: "11-20 hours",
+      reportingMaturity: "Mostly manual",
+      timeframe: "Within 90 days",
       employeeCount: "25–100",
       bottleneck: "Too many operating decisions still depend on the founder.",
       desiredOutcome: "A practical operating system that gives the team more autonomy.",

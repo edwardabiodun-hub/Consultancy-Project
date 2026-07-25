@@ -191,7 +191,7 @@ export default function AboutEddie() {
           <div>
             <p>
               The first conversation is used to understand the dependency, clarify the desired outcome,
-              and determine whether the Owner Independence Diagnostic is the right next step.
+              and determine whether the Business Independence Diagnostic is the right next step.
             </p>
             <Link className="button" href="/contact">Start a focused conversation →</Link>
           </div>
