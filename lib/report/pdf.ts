@@ -565,8 +565,9 @@ export function deriveCapacityPresentation(
   if (
     record.estimateType === "unavailable" &&
     record.impactConfidence === "low" &&
-    record.capacityInputSource === "none" &&
-    rangesAreNull
+    ["none", "exact", "banded"].includes(record.capacityInputSource) &&
+    rangesAreNull &&
+    grossHours
   ) {
     return {
       status: "unavailable",
@@ -610,8 +611,26 @@ export function deriveCapacityPresentation(
     record.realizationFactorHigh <= 1 &&
     record.recoverableHoursLow <= record.recoverableHoursHigh &&
     record.annualValueLow <= record.annualValueHigh;
+  const expectedFactors =
+    expected?.inputSource === "exact"
+      ? { low: 0.5, high: 0.7 }
+      : expected?.inputSource === "banded"
+        ? { low: 0.35, high: 0.55 }
+        : null;
+  const grossTotal = grossHours
+    ? grossHours.owner + grossHours.reporting + grossHours.rework
+    : null;
+  const hasCanonicalCapacityMath =
+    expectedFactors &&
+    grossTotal !== null &&
+    record.realizationFactorLow === expectedFactors.low &&
+    record.realizationFactorHigh === expectedFactors.high &&
+    record.recoverableHoursLow ===
+      Math.round(grossTotal * expectedFactors.low) &&
+    record.recoverableHoursHigh ===
+      Math.round(grossTotal * expectedFactors.high);
 
-  if (expected && grossHours && rangesAreOrdered) {
+  if (expected && grossHours && rangesAreOrdered && hasCanonicalCapacityMath) {
     return {
       status: "available",
       ...expected,

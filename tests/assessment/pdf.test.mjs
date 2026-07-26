@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { inflateSync } from "node:zlib";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
+import { calculateCapacity } from "../../lib/assessment/capacity.ts";
 import { buildAssessmentPdf } from "../../lib/report/pdf.ts";
 import {
   createAssessmentReportHandler,
@@ -111,6 +112,24 @@ const inspectPdf = async (record) => {
   };
 };
 
+const withCapacityResult = (record, capacity) => ({
+  ...record,
+  impactConfidence: capacity.confidence,
+  estimateType: capacity.estimateType,
+  capacityInputSource: capacity.inputSource,
+  ownerGrossHours: capacity.grossHours.owner,
+  reportingGrossHours: capacity.grossHours.reporting,
+  reworkGrossHours: capacity.grossHours.rework,
+  realizationFactorLow: capacity.realizationFactors?.low ?? null,
+  realizationFactorHigh: capacity.realizationFactors?.high ?? null,
+  recoverableHoursLow: capacity.recoverableHours?.low ?? null,
+  recoverableHoursHigh: capacity.recoverableHours?.high ?? null,
+  annualValueLow: capacity.annualValue?.low ?? null,
+  annualValueHigh: capacity.annualValue?.high ?? null,
+  capacityAssumptionCodesJson: JSON.stringify(capacity.assumptionCodes),
+  capacityExclusionCodesJson: JSON.stringify(capacity.exclusionCodes),
+});
+
 test("assessment PDF has the exact seven-page executive content contract", async () => {
   const { bytes, pageCount, pages } = await inspectPdf(baseRecord);
   assert.equal(Buffer.from(bytes.subarray(0, 5)).toString("ascii"), "%PDF-");
@@ -196,6 +215,8 @@ test("capacity page distinguishes banded, unavailable, and inconsistent records"
     capacityInputSource: "banded",
     realizationFactorLow: 0.35,
     realizationFactorHigh: 0.55,
+    recoverableHoursLow: 84,
+    recoverableHoursHigh: 132,
     capacityAssumptionCodesJson: JSON.stringify([
       "banded_midpoints",
       "realization_35_55",
@@ -232,22 +253,87 @@ test("capacity page distinguishes banded, unavailable, and inconsistent records"
   assert.match(inconsistent.pages[3], /Inconsistent retained estimate/i);
   assert.doesNotMatch(inconsistent.pages[3], /0\s*-\s*0/);
 
-  const unavailableWithWrongSource = await inspectPdf({
-    ...baseRecord,
-    estimateType: "unavailable",
-    impactConfidence: "low",
-    capacityInputSource: "exact",
-    realizationFactorLow: null,
-    realizationFactorHigh: null,
-    recoverableHoursLow: null,
-    recoverableHoursHigh: null,
-    annualValueLow: null,
-    annualValueHigh: null,
+});
+
+test("domain-derived unavailable states retain gross indicators without inventing money", async () => {
+  const owner = {
+    activityId: "owner-approvals",
+    category: "owner",
+    hoursPerOccurrence: 4,
+    occurrencesPerYear: 12,
+    hourlyCost: 100,
+  };
+  const fixtures = [
+    {
+      source: "exact",
+      capacity: calculateCapacity({ source: "exact", activities: [owner] }),
+      page4Source: "EXACT INPUT",
+      gross: "Owner gross hours: 48",
+    },
+    {
+      source: "banded",
+      capacity: calculateCapacity({ source: "banded", activities: [owner] }),
+      page4Source: "BANDED INPUT",
+      gross: "Owner gross hours: 48",
+    },
+    {
+      source: "none",
+      capacity: calculateCapacity({ source: "none", activities: [] }),
+      page4Source: "NO CAPACITY INPUT",
+      gross: "Owner gross hours: 0",
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const pdf = await inspectPdf(
+      withCapacityResult(baseRecord, fixture.capacity),
+    );
+    assert.match(pdf.pages[1], /No supported recoverable-hours or monetary estimate/i);
+    assert.doesNotMatch(pdf.pages[1], /\$/);
+    assert.match(pdf.pages[3], new RegExp(fixture.gross, "i"));
+    assert.match(pdf.pages[3], new RegExp(`SOURCE: ${fixture.page4Source}`, "i"));
+    assert.match(pdf.pages[3], /Nonfinancial supported indicators/i);
+    assert.doesNotMatch(pdf.pages[3], /\$/);
+    assert.match(pdf.pages[6], /Impact confidence: low/i);
+    assert.match(pdf.pages[6], /Capacity presentation: unavailable/i);
+  }
+
+  const contradictory = await inspectPdf({
+    ...withCapacityResult(baseRecord, fixtures[0].capacity),
+    realizationFactorLow: 0.5,
   });
+  for (const pageIndex of [1, 3]) {
+    assert.match(contradictory.pages[pageIndex], /Inconsistent retained estimate/i);
+    assert.doesNotMatch(contradictory.pages[pageIndex], /\$/);
+  }
   assert.match(
-    unavailableWithWrongSource.pages[3],
-    /Inconsistent retained estimate/i,
+    contradictory.pages.at(-1),
+    /Capacity presentation: inconsistent/i,
   );
+});
+
+test("available capacity tuples require canonical factors and recoverable arithmetic", async () => {
+  const inconsistentFixtures = [
+    { realizationFactorLow: 0.49 },
+    { realizationFactorHigh: 0.71 },
+    { recoverableHoursLow: 119 },
+    {
+      impactConfidence: "medium",
+      estimateType: "directional",
+      capacityInputSource: "banded",
+      realizationFactorLow: 0.35,
+      realizationFactorHigh: 0.55,
+      recoverableHoursLow: 85,
+      recoverableHoursHigh: 132,
+    },
+  ];
+
+  for (const changes of inconsistentFixtures) {
+    const pdf = await inspectPdf({ ...baseRecord, ...changes });
+    assert.match(pdf.pages[1], /Inconsistent retained estimate/i);
+    assert.match(pdf.pages[3], /Inconsistent retained estimate/i);
+    assert.match(pdf.pages[6], /Capacity presentation: inconsistent/i);
+  }
 });
 
 test("missing and migration-default capacity tuples suppress numbers on pages two and four", async () => {
