@@ -453,6 +453,33 @@
   border-left: 3px solid var(--bronze, #9a693a);
 }
 
+.assessment-field-error {
+  margin: 0.35rem 0 0;
+  color: #8a2f2f;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.assessment-field input[aria-invalid="true"],
+.assessment-field select[aria-invalid="true"] {
+  border-color: #8a2f2f;
+  box-shadow: 0 0 0 1px #8a2f2f;
+}
+
+.assessment-banded {
+  margin-top: 1.4rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--rule, #cbc7bc);
+}
+
+.assessment-finding-kind {
+  color: var(--bronze, #9a693a);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .assessment-actions-stack {
   flex-wrap: wrap;
 }

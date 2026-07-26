@@ -12,7 +12,8 @@ import type {
 } from "../../lib/assessment/types";
 import { loadSession, saveSession } from "../../lib/assessment/session";
 import { ContactGate } from "./ContactGate";
-import type { LeadDetails } from "./ContactGate";
+import type { LeadDraft } from "./ContactGate";
+import { BandedCapacityInputs } from "./BandedCapacityInputs";
 import { FullResult } from "./FullResult";
 import { PrecisionInputs } from "./PrecisionInputs";
 import { PreliminaryResult } from "./PreliminaryResult";
@@ -205,7 +206,14 @@ export function AssessmentFlow() {
   });
   const [screen, setScreen] = useState<Screen>("landing");
   const [questionIndex, setQuestionIndex] = useState(0);
-  const [, setLeadDetails] = useState<LeadDetails | null>(null);
+  const [leadDraft, setLeadDraft] = useState<LeadDraft>({
+    name: "",
+    workEmail: "",
+    company: "",
+    phone: "",
+    reportConsent: false,
+    marketingConsent: false,
+  });
   const stepRef = useRef<HTMLElement>(null);
   const previousStep = useRef<{ screen: Screen; questionIndex: number } | null>(null);
 
@@ -226,7 +234,7 @@ export function AssessmentFlow() {
 
   useEffect(() => {
     if (screen !== "processing") return;
-    const timer = window.setTimeout(() => setScreen("full"), 0);
+    const timer = window.setTimeout(() => setScreen("full"), 50);
     return () => window.clearTimeout(timer);
   }, [screen]);
 
@@ -518,6 +526,11 @@ export function AssessmentFlow() {
               </p>
             </div>
 
+            <BandedCapacityInputs
+              value={answers.capacity}
+              onChange={(capacity) => updateContext("capacity", capacity)}
+            />
+
             <div className="assessment-actions assessment-actions-split">
               <button className="assessment-back" type="button" onClick={goBack}>
                 Back
@@ -593,8 +606,13 @@ export function AssessmentFlow() {
         {screen === "contact" && (
           <ContactGate
             onBack={goBack}
+            initialValue={leadDraft}
+            onDraftChange={setLeadDraft}
             onSubmit={(lead) => {
-              setLeadDetails(lead);
+              setLeadDraft({
+                ...lead,
+                phone: lead.phone ?? "",
+              });
               setScreen("precision");
             }}
           />
@@ -606,6 +624,10 @@ export function AssessmentFlow() {
             onUseEarlierRanges={() => setScreen("processing")}
             onSkip={() =>
               continueWithCapacity({ source: "none", activities: [] })
+            }
+            hasEarlierRanges={
+              answers.capacity.source === "banded" &&
+              result.capacity.estimateType === "directional"
             }
             onComplete={continueWithCapacity}
           />

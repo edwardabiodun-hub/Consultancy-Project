@@ -8,6 +8,7 @@ import type { AssessmentAnswers, ComponentId } from "./types";
 
 export type AssessmentRisk = {
   code: string;
+  kind: "risk" | "watchpoint" | "strength";
   label: string;
   evidence: string;
 };
@@ -18,18 +19,46 @@ export type AssessmentCta = {
   reason: string;
 };
 
-const COMPONENT_RISKS: Record<ComponentId, { code: string; label: string }> = {
+const COMPONENT_FINDINGS: Record<
+  ComponentId,
+  {
+    risk: { code: string; label: string };
+    watchpoint: { code: string; label: string };
+    strength: { code: string; label: string };
+  }
+> = {
   ownerIndependence: {
-    code: "owner_bottleneck",
-    label: "Owner decision concentration",
+    risk: { code: "owner_bottleneck", label: "Owner decision concentration" },
+    watchpoint: {
+      code: "owner_independence_watchpoint",
+      label: "Owner independence watchpoint",
+    },
+    strength: {
+      code: "owner_independence_strength",
+      label: "Owner independence strength",
+    },
   },
   operatingSystem: {
-    code: "operating_system_gap",
-    label: "Operating-system inconsistency",
+    risk: { code: "operating_system_gap", label: "Operating-system inconsistency" },
+    watchpoint: {
+      code: "operating_system_watchpoint",
+      label: "Operating-system watchpoint",
+    },
+    strength: {
+      code: "operating_system_strength",
+      label: "Operating-system strength",
+    },
   },
   informationVisibility: {
-    code: "information_bottleneck",
-    label: "Information visibility gap",
+    risk: { code: "information_bottleneck", label: "Information visibility gap" },
+    watchpoint: {
+      code: "information_visibility_watchpoint",
+      label: "Information visibility watchpoint",
+    },
+    strength: {
+      code: "information_visibility_strength",
+      label: "Information visibility strength",
+    },
   },
 };
 
@@ -90,41 +119,85 @@ const buildRisks = (
     ComponentId,
     ScoreResult["components"][ComponentId],
   ][]).sort((left, right) => (left[1].score ?? 101) - (right[1].score ?? 101));
-  const orderedCodes = [
-    ...riskCodes,
-    ...rankedComponents.map(([component]) => COMPONENT_RISKS[component].code),
-  ];
+  const findings: AssessmentRisk[] = [];
+  if (riskCodes.includes("measurement_gap")) {
+    findings.push({
+      code: "measurement_gap",
+      kind: "risk",
+      label: "Measurement gap",
+      evidence:
+        score.confidence.reasons[0] ??
+        "One or more self-reported responses could not be verified.",
+    });
+  }
 
-  return [...new Set(orderedCodes)].slice(0, 3).map((code) => {
-    if (code === "measurement_gap") {
-      return {
-        code,
-        label: "Measurement gap",
-        evidence:
-          score.confidence.reasons[0] ??
-          "One or more self-reported responses could not be verified.",
-      };
-    }
-
-    const component = (Object.entries(COMPONENT_RISKS) as [
-      ComponentId,
-      { code: string; label: string },
-    ][]).find(([, definition]) => definition.code === code)?.[0];
-
-    if (!component) {
-      return {
-        code,
-        label: code.replaceAll("_", " "),
-        evidence: "This flag follows the deterministic scoring rules.",
-      };
-    }
-
-    return {
-      code,
-      label: COMPONENT_RISKS[component].label,
+  for (const [component, componentScore] of rankedComponents) {
+    if (componentScore.score === null) continue;
+    const kind =
+      componentScore.score < 45
+        ? "risk"
+        : componentScore.score < 80
+          ? "watchpoint"
+          : "strength";
+    const definition = COMPONENT_FINDINGS[component][kind];
+    findings.push({
+      code: definition.code,
+      kind,
+      label: definition.label,
       evidence: evidenceForComponent(component, answers),
-    };
-  });
+    });
+  }
+
+  return findings
+    .filter(
+      (finding, index, all) =>
+        all.findIndex((candidate) => candidate.code === finding.code) === index,
+    )
+    .slice(0, 3);
+};
+
+const buildRulesNarrative = ({
+  category,
+  scoreConfidence,
+  impactConfidence,
+  leadingFinding,
+  firstPriority,
+}: {
+  category: ScoreResult["category"];
+  scoreConfidence: ScoreResult["confidence"]["level"];
+  impactConfidence: ReturnType<typeof calculateCapacity>["confidence"];
+  leadingFinding?: AssessmentRisk;
+  firstPriority?: ReturnType<typeof interpretAssessment>["priorities"][number];
+}) => {
+  const finding =
+    leadingFinding?.label ??
+    "no supported operating finding because the evidence base is incomplete";
+  const priority = firstPriority?.title ?? "Complete the missing assessment evidence";
+  const confidence = `${scoreConfidence} score confidence`;
+  const impact = `${impactConfidence} impact confidence`;
+
+  if (category === "incomplete") {
+    return `The result is incomplete because the self-reported answers provide insufficient coverage for an overall score. The current evidence supports ${finding}. This result has ${confidence} and ${impact}. First controlled priority: ${priority}.`;
+  }
+
+  if (scoreConfidence === "low") {
+    return `This preliminary ${category === "highDependency" ? "high-dependency" : `${category}-independence`} result has ${confidence} because missing evidence limits interpretation. The leading supported finding is ${finding}. Capacity has ${impact}. First controlled priority: ${priority}.`;
+  }
+
+  const categoryIntroduction: Record<Exclude<ScoreResult["category"], "incomplete">, string> = {
+    strong: "Strong independence is indicated",
+    emerging: "Emerging independence is indicated",
+    developing: "Developing independence is indicated",
+    highDependency: "High dependency is indicated",
+  };
+  const findingType =
+    leadingFinding?.kind === "strength"
+      ? "strength"
+      : leadingFinding?.kind === "watchpoint"
+        ? "watchpoint"
+        : "risk";
+
+  return `${categoryIntroduction[category]} by the self-reported information, with ${confidence}. The leading supported ${findingType} is ${finding}. Capacity has ${impact}. First controlled priority: ${priority}.`;
 };
 
 const buildMissingEvidence = (
@@ -142,21 +215,37 @@ const buildMissingEvidence = (
 
 export function buildAssessmentResult(answers: AssessmentAnswers) {
   const score = scoreAssessment(answers);
-  const capacity = calculateCapacity(answers.capacity);
+  const calculatedCapacity = calculateCapacity(answers.capacity);
+  const capacity =
+    answers.capacity.source === "banded"
+      ? {
+          ...calculatedCapacity,
+          assumptions: [
+            ...calculatedCapacity.assumptions,
+            "Activity values use the midpoints of selected self-reported bands; they are not external benchmarks.",
+          ],
+        }
+      : calculatedCapacity;
   const interpretation = interpretAssessment(score, answers);
-  const category = score.category === "incomplete" ? "incomplete" : score.category;
+  const risks = buildRisks(score, answers, interpretation.riskCodes);
 
   return {
     methodologyVersion: ASSESSMENT_VERSION,
     score,
     capacity,
     interpretation,
-    risks: buildRisks(score, answers, interpretation.riskCodes),
+    risks,
     missingEvidence: buildMissingEvidence(score, capacity),
     cta: CTA_BY_ROUTE[interpretation.route],
     narrative: {
       source: "rules" as const,
-      summary: `This ${category} result identifies likely operating exposure from self-reported information; it does not validate root causes.`,
+      summary: buildRulesNarrative({
+        category: score.category,
+        scoreConfidence: score.confidence.level,
+        impactConfidence: capacity.confidence,
+        leadingFinding: risks[0],
+        firstPriority: interpretation.priorities[0],
+      }),
     },
   };
 }

@@ -68,15 +68,55 @@ const answerCurrentQuestion = async (user, optionIndex = 0) => {
   await user.click(next);
 };
 
-const finishAssessment = async (user, seenPrompts = []) => {
+const finishAssessment = async (user, seenPrompts = [], optionIndex = 0) => {
   let safety = 0;
   while (!screen.queryByRole("button", { name: "Unlock my full assessment" })) {
     const question = screen.getByRole("group");
     seenPrompts.push(question.textContent);
-    await answerCurrentQuestion(user);
+    await answerCurrentQuestion(user, optionIndex);
     safety += 1;
     assert.ok(safety <= 18, "assessment should complete within 18 scored questions");
   }
+};
+
+const reachPreliminary = async (
+  user,
+  { optionIndex = 0, restricted = false, banded = false } = {},
+) => {
+  await user.click(screen.getByRole("button", { name: "Start the assessment" }));
+  await fillRequiredContext(user);
+  if (restricted) {
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /market where employment, confidentiality, or conflict obligations/i,
+      }),
+    );
+  }
+  if (banded) {
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Owner intervention range" }),
+      "owner-1-2-weekly",
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", {
+        name: "Team reporting and reconciliation range",
+      }),
+      "reporting-2-4-monthly",
+    );
+  }
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await finishAssessment(user, [], optionIndex);
+};
+
+const submitLead = async (user) => {
+  await user.click(screen.getByRole("button", { name: "Unlock my full assessment" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), "Eddie Example");
+  await user.type(screen.getByRole("textbox", { name: "Work email" }), "eddie@example.com");
+  await user.type(screen.getByRole("textbox", { name: "Company" }), "Example Co");
+  await user.click(
+    screen.getByRole("checkbox", { name: /generate and email my assessment report/i }),
+  );
+  await user.click(screen.getByRole("button", { name: "Continue to full assessment" }));
 };
 
 test.afterEach(() => {
@@ -91,7 +131,8 @@ test("the six required context fields gate entry to scored questions", async () 
   assert.equal(document.activeElement, document.body);
   await user.click(screen.getByRole("button", { name: "Start the assessment" }));
 
-  assert.equal(screen.getAllByRole("combobox").length, 4);
+  assert.equal(screen.getAllByRole("combobox").length, 7);
+  assert.ok(screen.getByRole("combobox", { name: "Owner intervention range" }));
   assert.ok(screen.getByRole("group", { name: "Core operating systems" }));
   assert.ok(screen.getByRole("group", { name: "Organization shape" }));
   const continueButton = screen.getByRole("button", { name: "Continue" });
@@ -254,29 +295,18 @@ test("valid contact details unlock the full result when precision is skipped", a
   renderAssessment();
   const step = screen.getByRole("region", { name: "Assessment step" });
 
-  await user.click(screen.getByRole("button", { name: "Start the assessment" }));
-  await fillRequiredContext(user);
-  await user.click(screen.getByRole("button", { name: "Continue" }));
-  await finishAssessment(user);
+  await reachPreliminary(user);
 
   assert.ok(screen.getByRole("heading", { name: "0 out of 100" }));
   assert.equal(document.body.textContent.includes("$"), false);
-  await user.click(screen.getByRole("button", { name: "Unlock my full assessment" }));
-  assert.ok(screen.getByRole("heading", { name: "Where should we send your report?" }));
-  assert.equal(document.activeElement, step);
-
-  await user.type(screen.getByRole("textbox", { name: "Name" }), "Eddie Example");
-  await user.type(screen.getByRole("textbox", { name: "Work email" }), "eddie@example.com");
-  await user.type(screen.getByRole("textbox", { name: "Company" }), "Example Co");
-  await user.click(
-    screen.getByRole("checkbox", { name: /generate and email my assessment report/i }),
-  );
-  await user.click(screen.getByRole("button", { name: "Continue to full assessment" }));
-
+  await submitLead(user);
   assert.ok(screen.getByRole("heading", { name: "Improve the capacity estimate." }));
   assert.equal(document.activeElement, step);
-  await user.click(screen.getByRole("button", { name: "Skip financial estimate" }));
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
 
+  assert.match(screen.getByRole("status").textContent, /recalculating scores/i);
   await screen.findByRole("heading", { name: "0 out of 100" });
   assert.equal(document.activeElement, step);
   assert.equal(
@@ -285,7 +315,138 @@ test("valid contact details unlock the full result when precision is skipped", a
     3,
   );
   assert.match(document.body.textContent, /No financial estimate is available/i);
+  assert.match(document.body.textContent, /Unavailable estimate · Low impact confidence/i);
+  assert.equal(document.body.textContent.includes("$"), false);
   assert.ok(
     screen.getByRole("link", { name: "Discuss the Business Independence Diagnostic" }),
+  );
+});
+
+test("exact precision produces calculated high-confidence capacity in the integrated flow", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+
+  const owner = screen.getByRole("group", { name: "Owner intervention" });
+  const reporting = screen.getByRole("group", {
+    name: "Team reporting and reconciliation",
+  });
+  for (const [group, values] of [
+    [owner, ["2", "12", "100"]],
+    [reporting, ["3", "4", "12", "50"]],
+  ]) {
+    const fields = within(group).getAllByRole("spinbutton");
+    for (let index = 0; index < values.length; index += 1) {
+      await user.type(fields[index], values[index]);
+    }
+  }
+  await user.click(screen.getByRole("button", { name: "Calculate with exact inputs" }));
+
+  assert.match(screen.getByRole("status").textContent, /recalculating scores/i);
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  assert.match(document.body.textContent, /Calculated estimate · High impact confidence/i);
+  assert.match(document.body.textContent, /\$4,800/);
+  assert.match(document.body.textContent, /\$6,720/);
+  assert.ok(
+    screen.getByRole("link", { name: "Discuss the Business Independence Diagnostic" }),
+  );
+});
+
+test("earlier banded ranges produce a directional medium-confidence result", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user, { banded: true });
+
+  assert.equal(document.body.textContent.includes("$"), false);
+  await submitLead(user);
+  await user.click(screen.getByRole("button", { name: "Use my earlier ranges" }));
+
+  assert.match(screen.getByRole("status").textContent, /recalculating scores/i);
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  assert.match(document.body.textContent, /Directional estimate · Medium impact confidence/i);
+  assert.match(document.body.textContent, /\$4,620/);
+  assert.match(document.body.textContent, /\$7,260/);
+  assert.match(document.body.textContent, /midpoints of selected self-reported bands/i);
+});
+
+test("restricted integrated results suppress the consulting route", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user, { restricted: true });
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+  await screen.findByRole("heading", { name: "0 out of 100" });
+
+  assert.ok(
+    screen.getByRole("link", { name: "Explore educational founder resources" }),
+  );
+  assert.equal(
+    screen.queryByRole("link", { name: /Business Independence Diagnostic/i }),
+    null,
+  );
+});
+
+test("Back from contact and precision retains contact and assessment state", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user, { banded: true });
+  await user.click(screen.getByRole("button", { name: "Unlock my full assessment" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), "Eddie Example");
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await user.click(screen.getByRole("button", { name: "Unlock my full assessment" }));
+  assert.equal(screen.getByRole("textbox", { name: "Name" }).value, "Eddie Example");
+
+  await user.type(screen.getByRole("textbox", { name: "Work email" }), "eddie@example.com");
+  await user.type(screen.getByRole("textbox", { name: "Company" }), "Example Co");
+  await user.click(
+    screen.getByRole("checkbox", { name: /generate and email my assessment report/i }),
+  );
+  await user.click(screen.getByRole("button", { name: "Continue to full assessment" }));
+  assert.ok(screen.getByRole("button", { name: "Use my earlier ranges" }));
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  assert.equal(screen.getByRole("textbox", { name: "Name" }).value, "Eddie Example");
+  assert.equal(
+    screen.getByRole("textbox", { name: "Work email" }).value,
+    "eddie@example.com",
+  );
+  assert.equal(screen.getByRole("textbox", { name: "Company" }).value, "Example Co");
+  assert.equal(
+    screen.getByRole("checkbox", {
+      name: /generate and email my assessment report/i,
+    }).checked,
+    true,
+  );
+});
+
+test("strong integrated results present strengths and an insights route", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user, { optionIndex: 4 });
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+  await screen.findByRole("heading", { name: "100 out of 100" });
+
+  assert.match(document.body.textContent, /Strong independence is indicated/i);
+  const findings = within(
+    screen.getByRole("list", { name: "Evidence-backed findings" }),
+  ).getAllByRole("listitem");
+  assert.equal(findings.length, 3);
+  assert.ok(findings.every((finding) => /strength/i.test(finding.textContent)));
+  assert.doesNotMatch(
+    findings.map((finding) => finding.textContent).join(" "),
+    /owner_bottleneck|operating_system_gap|information_bottleneck/,
+  );
+  assert.ok(
+    screen.getByRole("link", { name: "Explore executive operating insights" }),
+  );
+  assert.equal(
+    screen.queryByRole("link", { name: /Business Independence Diagnostic/i }),
+    null,
   );
 });

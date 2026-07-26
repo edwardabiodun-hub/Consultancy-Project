@@ -81,14 +81,16 @@ export function FullResult({ result }: FullResultProps) {
         </ul>
       </section>
 
-      <section className="assessment-result-section" aria-labelledby="risk-profile">
-        <h2 id="risk-profile">Risk profile</h2>
-        <ul className="assessment-evidence-list" aria-label="Evidence-backed risks">
-          {result.risks.slice(0, 3).map((risk) => (
-            <li key={risk.code}>
-              <div className="assessment-code">{risk.code}</div>
-              <strong>{risk.label}</strong>
-              <p>{risk.evidence}</p>
+      <section className="assessment-result-section" aria-labelledby="operating-findings">
+        <h2 id="operating-findings">Operating findings</h2>
+        <ul className="assessment-evidence-list" aria-label="Evidence-backed findings">
+          {result.risks.slice(0, 3).map((finding) => (
+            <li key={finding.code}>
+              <div className="assessment-code">
+                {finding.kind} · {finding.code}
+              </div>
+              <strong>{finding.label}</strong>
+              <p>{finding.evidence}</p>
             </li>
           ))}
         </ul>

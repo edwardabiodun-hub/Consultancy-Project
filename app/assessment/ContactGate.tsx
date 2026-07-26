@@ -11,26 +11,61 @@ export type LeadDetails = {
   marketingConsent: boolean;
 };
 
+export type LeadDraft = Omit<LeadDetails, "reportConsent"> & {
+  phone: string;
+  reportConsent: boolean;
+};
+
 type ContactGateProps = {
   onBack: () => void;
   onSubmit: (lead: LeadDetails) => void;
+  initialValue?: LeadDraft;
+  onDraftChange?: (lead: LeadDraft) => void;
 };
 
 const validEmail = (value: string) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
-  const [name, setName] = useState("");
-  const [workEmail, setWorkEmail] = useState("");
-  const [company, setCompany] = useState("");
-  const [phone, setPhone] = useState("");
-  const [reportConsent, setReportConsent] = useState(false);
-  const [marketingConsent, setMarketingConsent] = useState(false);
-  const complete =
-    name.trim().length > 0 &&
-    validEmail(workEmail) &&
-    company.trim().length > 0 &&
-    reportConsent;
+const EMPTY_LEAD: LeadDraft = {
+  name: "",
+  workEmail: "",
+  company: "",
+  phone: "",
+  reportConsent: false,
+  marketingConsent: false,
+};
+
+export function ContactGate({
+  onBack,
+  onSubmit,
+  initialValue,
+  onDraftChange,
+}: ContactGateProps) {
+  const [lead, setLead] = useState<LeadDraft>(initialValue ?? EMPTY_LEAD);
+  const [attempted, setAttempted] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const { name, workEmail, company, phone, reportConsent, marketingConsent } = lead;
+  const update = <Field extends keyof LeadDraft>(
+    field: Field,
+    value: LeadDraft[Field],
+  ) => {
+    const next = { ...lead, [field]: value };
+    setLead(next);
+    onDraftChange?.(next);
+  };
+  const errors = {
+    name: name.trim() ? "" : "Enter your name.",
+    workEmail: validEmail(workEmail) ? "" : "Enter a valid work email.",
+    company: company.trim() ? "" : "Enter your company.",
+    reportConsent: reportConsent
+      ? ""
+      : "Consent is required to generate and email the report.",
+  };
+  const showError = (field: keyof typeof errors) =>
+    Boolean(errors[field]) && (attempted || touched[field]);
+  const touch = (field: keyof typeof errors) => {
+    setTouched((current) => ({ ...current, [field]: true }));
+  };
 
   return (
     <>
@@ -42,9 +77,21 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
       </p>
 
       <form
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (!complete) return;
+          setAttempted(true);
+          const firstInvalid = (
+            ["name", "workEmail", "company", "reportConsent"] as const
+          ).find((field) => errors[field]);
+          if (firstInvalid) {
+            const id =
+              firstInvalid === "reportConsent"
+                ? "lead-report-consent"
+                : `lead-${firstInvalid.replace("workEmail", "work-email")}`;
+            document.getElementById(id)?.focus();
+            return;
+          }
           onSubmit({
             name: name.trim(),
             workEmail: workEmail.trim(),
@@ -64,8 +111,16 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
               value={name}
               required
               autoComplete="name"
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => update("name", event.target.value)}
+              onBlur={() => touch("name")}
+              aria-invalid={showError("name")}
+              aria-describedby={showError("name") ? "lead-name-error" : undefined}
             />
+            {showError("name") && (
+              <span className="assessment-field-error" id="lead-name-error">
+                {errors.name}
+              </span>
+            )}
           </div>
           <div className="assessment-field">
             <label htmlFor="lead-work-email">Work email</label>
@@ -76,8 +131,18 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
               value={workEmail}
               required
               autoComplete="email"
-              onChange={(event) => setWorkEmail(event.target.value)}
+              onChange={(event) => update("workEmail", event.target.value)}
+              onBlur={() => touch("workEmail")}
+              aria-invalid={showError("workEmail")}
+              aria-describedby={
+                showError("workEmail") ? "lead-work-email-error" : undefined
+              }
             />
+            {showError("workEmail") && (
+              <span className="assessment-field-error" id="lead-work-email-error">
+                {errors.workEmail}
+              </span>
+            )}
           </div>
           <div className="assessment-field">
             <label htmlFor="lead-company">Company</label>
@@ -87,8 +152,18 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
               value={company}
               required
               autoComplete="organization"
-              onChange={(event) => setCompany(event.target.value)}
+              onChange={(event) => update("company", event.target.value)}
+              onBlur={() => touch("company")}
+              aria-invalid={showError("company")}
+              aria-describedby={
+                showError("company") ? "lead-company-error" : undefined
+              }
             />
+            {showError("company") && (
+              <span className="assessment-field-error" id="lead-company-error">
+                {errors.company}
+              </span>
+            )}
           </div>
           <div className="assessment-field">
             <label htmlFor="lead-phone">Phone (optional)</label>
@@ -98,7 +173,7 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
               type="tel"
               value={phone}
               autoComplete="tel"
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(event) => update("phone", event.target.value)}
             />
           </div>
         </div>
@@ -106,20 +181,36 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
         <div className="assessment-disclosures">
           <label>
             <input
+              id="lead-report-consent"
               type="checkbox"
               required
               checked={reportConsent}
-              onChange={(event) => setReportConsent(event.target.checked)}
+              onChange={(event) => update("reportConsent", event.target.checked)}
+              onBlur={() => touch("reportConsent")}
+              aria-invalid={showError("reportConsent")}
+              aria-describedby={
+                showError("reportConsent")
+                  ? "lead-report-consent-error"
+                  : undefined
+              }
             />
             <span>
               I consent to generate and email my assessment report using these details.
             </span>
           </label>
+          {showError("reportConsent") && (
+            <span
+              className="assessment-field-error"
+              id="lead-report-consent-error"
+            >
+              {errors.reportConsent}
+            </span>
+          )}
           <label>
             <input
               type="checkbox"
               checked={marketingConsent}
-              onChange={(event) => setMarketingConsent(event.target.checked)}
+              onChange={(event) => update("marketingConsent", event.target.checked)}
             />
             <span>Send me occasional operating insights and updates (optional).</span>
           </label>
@@ -133,7 +224,7 @@ export function ContactGate({ onBack, onSubmit }: ContactGateProps) {
           <button className="assessment-back" type="button" onClick={onBack}>
             Back
           </button>
-          <button className="button" type="submit" disabled={!complete}>
+          <button className="button" type="submit">
             Continue to full assessment
           </button>
         </div>

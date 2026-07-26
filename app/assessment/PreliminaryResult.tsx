@@ -59,11 +59,14 @@ export function PreliminaryResult({
         <span>Score confidence: {result.score.confidence.level}</span>
       </div>
 
-      <section className="assessment-result-section" aria-labelledby="preliminary-risks">
-        <h2 id="preliminary-risks">Most exposed operating patterns</h2>
-        <ul className="assessment-risk-list" aria-label="Preliminary risks">
-          {result.risks.slice(0, 2).map((risk) => (
-            <li key={risk.code}>{risk.label}</li>
+      <section className="assessment-result-section" aria-labelledby="preliminary-findings">
+        <h2 id="preliminary-findings">Leading operating findings</h2>
+        <ul className="assessment-risk-list" aria-label="Preliminary findings">
+          {result.risks.slice(0, 2).map((finding) => (
+            <li key={finding.code}>
+              <span className="assessment-finding-kind">{finding.kind}</span>
+              {finding.label}
+            </li>
           ))}
         </ul>
       </section>
