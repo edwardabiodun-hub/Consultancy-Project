@@ -115,6 +115,16 @@ test("uses the new advisory naming across supporting routes", async () => {
   }
 });
 
+test("renders the Business Independence Assessment entry experience", async () => {
+  const response = await request("/assessment");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /How independently can your business operate/i);
+  assert.match(html, /approximately five minutes/i);
+  assert.match(html, /deterministic scoring/i);
+  assert.match(html, /Start the assessment/i);
+});
+
 test("contact endpoint rejects invalid inquiries", async () => {
   const response = await request("/api/contact", {
     method: "POST",

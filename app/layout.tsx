@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 const nav = [
+  ["/assessment", "Take the assessment"],
   ["/diagnostic", "Reduce Owner Dependency"],
   ["/how-i-help", "Improve Executive Decisions"],
   ["/how-i-help#automation", "Automate Manual Operations"],
