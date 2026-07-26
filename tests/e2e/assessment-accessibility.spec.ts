@@ -67,6 +67,27 @@ async function completeAllComponentQuestions(page: Page) {
   }
 }
 
+/** Fills and submits the contact gate by keyboard. Reused by the main
+ * keyboard-flow test (which additionally exercises the consent-omitted
+ * error path first) and by tests that just need to reach the full-result
+ * screen efficiently. */
+async function fillAndSubmitContactGate(page: Page) {
+  await page.getByLabel("Name").fill("Accessibility Tester");
+  await page.getByLabel("Work email").fill("tester@example.com");
+  await page.getByLabel("Company").fill("Example Co");
+  await pressKey(
+    page,
+    page.getByRole("checkbox", { name: /I consent to generate/ }),
+    "Space",
+  );
+
+  const submitButton = page.getByRole("button", {
+    name: "Continue to full assessment",
+  });
+  await submitButton.focus();
+  await page.keyboard.press("Enter");
+}
+
 test.describe("Business Independence Assessment — accessibility", () => {
   test("completes the assessment using only the keyboard, with focus moving to each new heading", async ({
     page,
@@ -155,7 +176,7 @@ test.describe("Business Independence Assessment — accessibility", () => {
     await page.keyboard.press("Enter");
 
     // "processing" is a transient screen; wait for the final "full" result.
-    await expect(page.locator("h1")).not.toHaveText("Applying deterministic rules", {
+    await expect(page.locator("h1")).toHaveText(/out of 100|Result incomplete/, {
       timeout: 15_000,
     });
     await assertSingleH1(page);
@@ -176,10 +197,12 @@ test.describe("Business Independence Assessment — accessibility", () => {
     ).toBeVisible();
   });
 
-  test("meets WCAG AA contrast for primary text/background pairs", async ({ page }) => {
-    await page.goto("/assessment");
-
-    const pairs = await page.evaluate(() => {
+  /** Computes real WCAG contrast ratios, from live computed styles, for
+   * whichever of the given CSS selectors currently match an element on the
+   * page. Shared across screens so the same large-text/normal-text
+   * thresholds and background-resolution logic apply consistently. */
+  async function contrastPairsFor(page: Page, selectors: string[]) {
+    return page.evaluate((selectorList: string[]) => {
       const parse = (color: string): [number, number, number] => {
         const match = color.match(/rgba?\(([^)]+)\)/);
         if (!match) return [0, 0, 0];
@@ -210,12 +233,9 @@ test.describe("Business Independence Assessment — accessibility", () => {
         return getComputedStyle(document.body).backgroundColor;
       };
 
-      const targets = [
-        document.querySelector("h1"),
-        document.querySelector(".assessment-lede"),
-        document.querySelector(".assessment-kicker"),
-        document.querySelector("button.button"),
-      ].filter((element): element is Element => element !== null);
+      const targets = selectorList
+        .map((selector) => document.querySelector(selector))
+        .filter((element): element is Element => element !== null);
 
       return targets.map((element) => {
         const style = getComputedStyle(element);
@@ -228,8 +248,12 @@ test.describe("Business Independence Assessment — accessibility", () => {
           ratio: contrastOf(style.color, background),
         };
       });
-    });
+    }, selectors);
+  }
 
+  function assertAA(
+    pairs: Array<{ selector: string; foreground: string; background: string; ratio: number }>,
+  ) {
     expect(pairs.length).toBeGreaterThan(0);
     for (const pair of pairs) {
       // WCAG AA: 4.5:1 for normal text, 3:1 for large-scale text (headings,
@@ -242,6 +266,50 @@ test.describe("Business Independence Assessment — accessibility", () => {
         `${pair.selector}: ${pair.foreground} on ${pair.background} = ${pair.ratio.toFixed(2)}:1`,
       ).toBeGreaterThanOrEqual(threshold);
     }
+  }
+
+  test("meets WCAG AA contrast for primary text/background pairs", async ({ page }) => {
+    await page.goto("/assessment");
+    assertAA(
+      await contrastPairsFor(page, [
+        "h1",
+        ".assessment-lede",
+        ".assessment-kicker",
+        "button.button",
+      ]),
+    );
+
+    // The field-level error text (contact gate) — a distinct red color not
+    // covered by the landing-screen sample above.
+    const startButton = page.getByRole("button", { name: "Start the assessment" });
+    await startButton.focus();
+    await page.keyboard.press("Enter");
+    await completeContextScreen(page);
+    await completeAllComponentQuestions(page);
+    await page
+      .getByRole("button", { name: "Unlock my full assessment" })
+      .click();
+    await page.getByRole("button", { name: "Continue to full assessment" }).click();
+    await expect(page.locator("#lead-report-consent-error")).toBeVisible();
+    assertAA(await contrastPairsFor(page, ["#lead-report-consent-error"]));
+
+    // The full result screen: the richest layout and widest color surface
+    // in the flow (component-score bars, priority list, CTA).
+    await fillAndSubmitContactGate(page);
+    await page
+      .getByRole("button", {
+        name: /continue without a financial range|skip financial estimate/i,
+      })
+      .click();
+    await expect(page.locator("h1")).toHaveText(/out of 100|Result incomplete/, {
+      timeout: 15_000,
+    });
+    assertAA(
+      await contrastPairsFor(page, [
+        ".assessment-result-section p",
+        ".assessment-route .button",
+      ]),
+    );
   });
 
   test("respects prefers-reduced-motion", async ({ page }) => {
@@ -258,22 +326,62 @@ test.describe("Business Independence Assessment — accessibility", () => {
   });
 
   test("has no horizontal overflow at a mobile viewport", async ({ page }) => {
+    const overflowOf = () =>
+      page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto("/assessment");
+    expect(await overflowOf()).toBeLessThanOrEqual(1);
 
-    const landingOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(landingOverflow).toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Start the assessment" }).click();
+    await completeContextScreen(page);
+    expect(await overflowOf()).toBeLessThanOrEqual(1);
 
+    // The full result screen has the most complex layout in the flow
+    // (fixed-minimum-width grid tracks in the component-score list), which
+    // is exactly the kind of construct most likely to overflow a narrow
+    // viewport — the two simple screens above don't exercise that risk.
+    await completeAllComponentQuestions(page);
+    await page.getByRole("button", { name: "Unlock my full assessment" }).click();
+    await fillAndSubmitContactGate(page);
     await page
-      .getByRole("button", { name: "Start the assessment" })
+      .getByRole("button", {
+        name: /continue without a financial range|skip financial estimate/i,
+      })
       .click();
+    await expect(page.locator("h1")).toHaveText(/out of 100|Result incomplete/, {
+      timeout: 15_000,
+    });
+    expect(await overflowOf()).toBeLessThanOrEqual(1);
+  });
+
+  test("shows a visible focus indicator on keyboard-focused controls", async ({ page }) => {
+    const outlineOf = (locator: ReturnType<Page["locator"]>) =>
+      locator.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+      });
+
+    await page.goto("/assessment");
+
+    // Global focus-visible rule (app/globals.css) applies to every native
+    // button/input/select/link, including this primary CTA.
+    const startButton = page.getByRole("button", { name: "Start the assessment" });
+    await startButton.focus();
+    const buttonOutline = await outlineOf(startButton);
+    expect(buttonOutline.outlineStyle).not.toBe("none");
+    expect(parseFloat(buttonOutline.outlineWidth)).toBeGreaterThan(0);
+
+    await page.keyboard.press("Enter");
     await completeContextScreen(page);
 
-    const questionScreenOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(questionScreenOverflow).toBeLessThanOrEqual(1);
+    // Radio options additionally get a scoped `:has(input:focus-visible)`
+    // outline on the wrapping label (assessment.css), since the input
+    // itself is visually small — verify that reinforcement independently.
+    const firstOptionLabel = page.locator(".assessment-option").first();
+    await firstOptionLabel.locator("input[type=radio]").focus();
+    const radioOutline = await outlineOf(firstOptionLabel);
+    expect(radioOutline.outlineStyle).not.toBe("none");
+    expect(parseFloat(radioOutline.outlineWidth)).toBeGreaterThan(0);
   });
 });
