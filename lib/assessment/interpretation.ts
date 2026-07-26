@@ -5,7 +5,7 @@ export type LeadRoute = "diagnostic" | "nurture" | "insights" | "restricted";
 export type Priority = { component: ComponentId; title: string; action: string; indicator: string };
 export type AssessmentInterpretation = { riskCodes: string[]; priorities: Priority[]; route: LeadRoute };
 
-const LIBRARY: Record<ComponentId, Priority> = {
+export const PRIORITY_LIBRARY: Record<ComponentId, Priority> = {
   ownerIndependence: {
     component: "ownerIndependence",
     title: "Clarify decision authority",
@@ -47,7 +47,7 @@ export function interpretAssessment(score: ScoreResult, answers: AssessmentAnswe
 
   return {
     riskCodes: [...new Set(riskCodes)].slice(0, 3),
-    priorities: ranked.slice(0, 3).map(([key]) => LIBRARY[key]),
+    priorities: ranked.slice(0, 3).map(([key]) => PRIORITY_LIBRARY[key]),
     route,
   };
 }

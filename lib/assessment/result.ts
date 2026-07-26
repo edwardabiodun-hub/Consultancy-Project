@@ -65,7 +65,7 @@ const COMPONENT_FINDINGS: Record<
   },
 };
 
-const CTA_BY_ROUTE: Record<LeadRoute, AssessmentCta> = {
+export const CTA_BY_ROUTE: Record<LeadRoute, AssessmentCta> = {
   diagnostic: {
     href: "/diagnostic",
     label: "Discuss the Business Independence Diagnostic",
