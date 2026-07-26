@@ -80,8 +80,6 @@ type ComponentDefinition = {
     | "ownerIndependenceScore"
     | "operatingSystemScore"
     | "informationVisibilityScore";
-  strength: string;
-  constraint: string;
   implication: string;
 };
 
@@ -89,22 +87,16 @@ const COMPONENTS: Record<ComponentId, ComponentDefinition> = {
   ownerIndependence: {
     label: "Owner independence",
     scoreKey: "ownerIndependenceScore",
-    strength: "Delegated decisions or continuity practices are present at the level supported by the aggregate score.",
-    constraint: "Owner dependence remains possible until decision rights and absence continuity are validated.",
     implication: "Unresolved owner dependence can delay routine decisions and exception handling.",
   },
   operatingSystem: {
     label: "Operating-system maturity",
     scoreKey: "operatingSystemScore",
-    strength: "Repeatable workflow, ownership, or management-cadence practices are present at the level supported by the aggregate score.",
-    constraint: "Consistency across workflows, owners, and escalation paths requires validation.",
     implication: "Operating inconsistency can increase rework, handoff friction, and management intervention.",
   },
   informationVisibility: {
     label: "Information visibility",
     scoreKey: "informationVisibilityScore",
-    strength: "Decision information or KPI practices are present at the level supported by the aggregate score.",
-    constraint: "Timeliness, trust, and action ownership require validation before treating information as decision-ready.",
     implication: "Information gaps can delay detection, decisions, and corrective action.",
   },
 };
@@ -482,13 +474,6 @@ const findingLabel = (finding: Finding) =>
     ? `${COMPONENTS[finding.component].label} ${finding.kind}`
     : "Controlled finding");
 
-const capacitySource = (record: AssessmentReportRecord) =>
-  record.capacityInputSource === "exact"
-    ? "realization-adjusted from exact input"
-    : record.capacityInputSource === "banded"
-      ? "realization-adjusted from banded input"
-      : "unavailable";
-
 const capacityInputLabel = (source: string) =>
   source === "exact"
     ? "EXACT INPUT"
@@ -496,15 +481,170 @@ const capacityInputLabel = (source: string) =>
       ? "BANDED INPUT"
       : "NO CAPACITY INPUT";
 
-const estimateIsComplete = (record: AssessmentReportRecord) =>
-  [
+type CapacityAvailable = {
+  status: "available";
+  impactConfidence: "high" | "medium";
+  inputSource: "exact" | "banded";
+  sourceLabel:
+    | "realization-adjusted from exact input"
+    | "realization-adjusted from banded input";
+  grossHours: { owner: number; reporting: number; rework: number };
+  realization: { low: number; high: number };
+  recoverableHours: { low: number; high: number };
+  annualValue: { low: number; high: number };
+  assumptions: string[];
+  exclusions: string[];
+};
+
+type CapacityUnavailable = {
+  status: "unavailable" | "inconsistent";
+  impactConfidence: string;
+  inputSource: string;
+  sourceLabel: "unavailable";
+  grossHours: { owner: number; reporting: number; rework: number } | null;
+  assumptions: string[];
+  exclusions: string[];
+  notice: string;
+};
+
+export type CapacityPresentation =
+  | CapacityAvailable
+  | CapacityUnavailable;
+
+const controlledTexts = (
+  json: string,
+  library: Record<string, string>,
+  empty: string,
+) => {
+  const codes = parseArray<string>(json);
+  return codes.length
+    ? codes.map(
+        (code) => library[code] ?? "Unrecognized controlled code.",
+      )
+    : [empty];
+};
+
+export function deriveCapacityPresentation(
+  record: AssessmentReportRecord,
+): CapacityPresentation {
+  const grossValues = [
+    record.ownerGrossHours,
+    record.reportingGrossHours,
+    record.reworkGrossHours,
+  ];
+  const grossIsValid = grossValues.every(
+    (value) => isFiniteNumber(value) && value >= 0,
+  );
+  const grossHours = grossIsValid
+    ? {
+        owner: record.ownerGrossHours,
+        reporting: record.reportingGrossHours,
+        rework: record.reworkGrossHours,
+      }
+    : null;
+  const assumptions = controlledTexts(
+    record.capacityAssumptionCodesJson,
+    ASSUMPTIONS,
+    "No controlled capacity assumptions were retained.",
+  );
+  const exclusions = controlledTexts(
+    record.capacityExclusionCodesJson,
+    EXCLUSIONS,
+    "No controlled exclusions were recorded.",
+  );
+  const rangeValues = [
     record.realizationFactorLow,
     record.realizationFactorHigh,
     record.recoverableHoursLow,
     record.recoverableHoursHigh,
     record.annualValueLow,
     record.annualValueHigh,
-  ].every(isFiniteNumber);
+  ];
+  const rangesAreNull = rangeValues.every((value) => value === null);
+
+  if (
+    record.estimateType === "unavailable" &&
+    record.impactConfidence === "low" &&
+    record.capacityInputSource === "none" &&
+    rangesAreNull
+  ) {
+    return {
+      status: "unavailable",
+      impactConfidence: record.impactConfidence,
+      inputSource: record.capacityInputSource,
+      sourceLabel: "unavailable",
+      grossHours,
+      assumptions,
+      exclusions,
+      notice:
+        "No supported recoverable-hours or monetary estimate is retained.",
+    };
+  }
+
+  const expected =
+    record.estimateType === "calculated" &&
+    record.impactConfidence === "high" &&
+    record.capacityInputSource === "exact"
+      ? {
+          inputSource: "exact" as const,
+          impactConfidence: "high" as const,
+          sourceLabel:
+            "realization-adjusted from exact input" as const,
+        }
+      : record.estimateType === "directional" &&
+          record.impactConfidence === "medium" &&
+          record.capacityInputSource === "banded"
+        ? {
+            inputSource: "banded" as const,
+            impactConfidence: "medium" as const,
+            sourceLabel:
+              "realization-adjusted from banded input" as const,
+          }
+        : null;
+  const rangesAreValid = rangeValues.every(
+    (value) => isFiniteNumber(value) && value >= 0,
+  );
+  const rangesAreOrdered =
+    rangesAreValid &&
+    record.realizationFactorLow <= record.realizationFactorHigh &&
+    record.realizationFactorHigh <= 1 &&
+    record.recoverableHoursLow <= record.recoverableHoursHigh &&
+    record.annualValueLow <= record.annualValueHigh;
+
+  if (expected && grossHours && rangesAreOrdered) {
+    return {
+      status: "available",
+      ...expected,
+      grossHours,
+      realization: {
+        low: record.realizationFactorLow,
+        high: record.realizationFactorHigh,
+      },
+      recoverableHours: {
+        low: record.recoverableHoursLow,
+        high: record.recoverableHoursHigh,
+      },
+      annualValue: {
+        low: record.annualValueLow,
+        high: record.annualValueHigh,
+      },
+      assumptions,
+      exclusions,
+    };
+  }
+
+  return {
+    status: "inconsistent",
+    impactConfidence: record.impactConfidence,
+    inputSource: record.capacityInputSource,
+    sourceLabel: "unavailable",
+    grossHours: null,
+    assumptions,
+    exclusions,
+    notice:
+      "Inconsistent retained estimate: the compact capacity tuple is incomplete or internally incoherent. No recoverable-hours or monetary estimate is rendered.",
+  };
+}
 
 const sourceKey = (context: DrawContext) => {
   rule(context, 10);
@@ -518,6 +658,7 @@ const sourceKey = (context: DrawContext) => {
 export async function buildAssessmentPdf(
   record: AssessmentReportRecord,
 ): Promise<Uint8Array> {
+  const capacityPresentation = deriveCapacityPresentation(record);
   const pdf = await PDFDocument.create();
   const fonts: Fonts = {
     body: await pdf.embedFont(StandardFonts.Helvetica),
@@ -594,7 +735,7 @@ export async function buildAssessmentPdf(
   rule(cover);
   drawAt(
     cover,
-    `Score confidence: ${record.scoreConfidence} | Impact confidence: ${record.impactConfidence}`,
+    `Score confidence: ${record.scoreConfidence} | Impact confidence: ${capacityPresentation.impactConfidence}`,
     { font: fonts.bodyBold, size: 10, gapAfter: 8 },
   );
   drawAt(
@@ -637,12 +778,12 @@ export async function buildAssessmentPdf(
   label(summary, "Capacity signal");
   drawAt(
     summary,
-    record.estimateType === "unavailable"
-      ? "No supported financial capacity estimate is retained."
-      : `${integer.format(record.recoverableHoursLow ?? 0)} - ${integer.format(record.recoverableHoursHigh ?? 0)} recoverable hours; ${currency.format(record.annualValueLow ?? 0)} - ${currency.format(record.annualValueHigh ?? 0)} annual capacity value.`,
+    capacityPresentation.status === "available"
+      ? `${integer.format(capacityPresentation.recoverableHours.low)} - ${integer.format(capacityPresentation.recoverableHours.high)} recoverable hours; ${currency.format(capacityPresentation.annualValue.low)} - ${currency.format(capacityPresentation.annualValue.high)} annual capacity value.`
+      : capacityPresentation.notice,
     { size: 9, lineHeight: 12, gapAfter: 4 },
   );
-  drawAt(summary, `SOURCE: ${capacitySource(record).toUpperCase()}`, {
+  drawAt(summary, `SOURCE: ${capacityPresentation.sourceLabel.toUpperCase()}`, {
     font: fonts.bodyBold,
     size: 7,
     gapAfter: 9,
@@ -672,22 +813,52 @@ export async function buildAssessmentPdf(
       `${definition.label}: ${score === null ? "Incomplete" : `${integer.format(score)} / 100`}`,
       { font: fonts.bodyBold, size: 11, gapAfter: 2, color: COLORS.forest },
     );
-    drawAt(components, `Controlled strength: ${definition.strength}`, {
-      size: 7.8,
-      lineHeight: 10,
-      gapAfter: 2,
-    });
-    drawAt(components, `Controlled constraint: ${definition.constraint}`, {
-      size: 7.8,
-      lineHeight: 10,
-      gapAfter: 2,
-    });
-    const finding = findings.find(
-      (candidate) => candidate.component === componentId,
+    const strength = findings.find(
+      (candidate) =>
+        candidate.component === componentId &&
+        candidate.kind === "strength",
+    );
+    const constraint = findings.find(
+      (candidate) =>
+        candidate.component === componentId &&
+        (candidate.kind === "risk" ||
+          candidate.kind === "watchpoint"),
     );
     drawAt(
       components,
-      `Evidence basis: ${finding ? evidenceSummary(finding) : "Aggregate component score only; question-level evidence was not retained for this component finding."}`,
+      strength
+        ? `Controlled strength: ${evidenceSummary(strength)}`
+        : "No controlled strength supported by the compact record.",
+      {
+      size: 7.8,
+      lineHeight: 10,
+      gapAfter: 2,
+      },
+    );
+    drawAt(
+      components,
+      constraint
+        ? `Controlled constraint: ${evidenceSummary(constraint)}`
+        : "No controlled constraint supported by the compact record.",
+      {
+      size: 7.8,
+      lineHeight: 10,
+      gapAfter: 2,
+      },
+    );
+    drawAt(
+      components,
+      `Evidence basis: ${
+        strength || constraint
+          ? [strength, constraint]
+              .filter(
+                (finding): finding is Finding =>
+                  finding !== undefined,
+              )
+              .map(evidenceSummary)
+              .join(" ")
+          : "No matching controlled finding evidence is retained for this component."
+      }`,
       { size: 7.8, lineHeight: 10, gapAfter: 8, color: COLORS.muted },
     );
   }
@@ -696,32 +867,39 @@ export async function buildAssessmentPdf(
   const capacity = addPage(pdf, fonts, 4, "Recoverable capacity");
   label(capacity, "Bounded operating estimate");
   title(capacity, "Recoverable capacity");
-  drawAt(capacity, `Impact confidence: ${record.impactConfidence}`, {
+  drawAt(capacity, `Impact confidence: ${capacityPresentation.impactConfidence}`, {
     font: fonts.bodyBold,
     size: 10,
     gapAfter: 10,
     color: COLORS.bronze,
   });
-  const grossRows = [
-    ["Owner gross hours", record.ownerGrossHours],
-    ["Reporting gross hours", record.reportingGrossHours],
-    ["Rework gross hours", record.reworkGrossHours],
-  ] as const;
-  for (const [heading, value] of grossRows) {
-    drawAt(capacity, `${heading}: ${integer.format(value)} | SOURCE: ${capacityInputLabel(record.capacityInputSource)}`, {
-      font: fonts.bodyBold,
-      size: 9,
-      gapAfter: 5,
-    });
-  }
-  if (record.estimateType !== "unavailable" && !estimateIsComplete(record)) {
+  if (capacityPresentation.status === "inconsistent") {
     label(capacity, "Inconsistent retained estimate");
     drawAt(
       capacity,
-      "A non-unavailable estimate is missing one or more required range or realization fields. No financial range is rendered.",
+      capacityPresentation.notice,
       { font: fonts.display, size: 14, lineHeight: 18, gapAfter: 10 },
     );
-  } else if (record.estimateType === "unavailable") {
+  } else {
+    if (capacityPresentation.grossHours) {
+      const grossRows = [
+        ["Owner gross hours", capacityPresentation.grossHours.owner],
+        [
+          "Reporting gross hours",
+          capacityPresentation.grossHours.reporting,
+        ],
+        ["Rework gross hours", capacityPresentation.grossHours.rework],
+      ] as const;
+      for (const [heading, value] of grossRows) {
+        drawAt(
+          capacity,
+          `${heading}: ${integer.format(value)} | SOURCE: ${capacityInputLabel(capacityPresentation.inputSource)}`,
+          { font: fonts.bodyBold, size: 9, gapAfter: 5 },
+        );
+      }
+    }
+  }
+  if (capacityPresentation.status === "unavailable") {
     label(capacity, "Nonfinancial supported indicators");
     drawAt(
       capacity,
@@ -734,23 +912,23 @@ export async function buildAssessmentPdf(
       "Complete time, frequency, people, and cost inputs across at least two eligible categories are needed for a supported range.",
       { size: 9, lineHeight: 12, gapAfter: 8 },
     );
-  } else {
+  } else if (capacityPresentation.status === "available") {
     drawAt(
       capacity,
-      `Recoverable hours: ${integer.format(record.recoverableHoursLow)} - ${integer.format(record.recoverableHoursHigh)}`,
+      `Recoverable hours: ${integer.format(capacityPresentation.recoverableHours.low)} - ${integer.format(capacityPresentation.recoverableHours.high)}`,
       { font: fonts.displayBold, size: 19, lineHeight: 23, gapAfter: 3, color: COLORS.forest },
     );
     drawAt(
       capacity,
-      `Annual capacity value: ${currency.format(record.annualValueLow)} - ${currency.format(record.annualValueHigh)}`,
+      `Annual capacity value: ${currency.format(capacityPresentation.annualValue.low)} - ${currency.format(capacityPresentation.annualValue.high)}`,
       { font: fonts.displayBold, size: 17, lineHeight: 21, gapAfter: 5, color: COLORS.forest },
     );
     drawAt(
       capacity,
-      `Realization range: ${integer.format(record.realizationFactorLow * 100)} - ${integer.format(record.realizationFactorHigh * 100)} percent`,
+      `Realization range: ${integer.format(capacityPresentation.realization.low * 100)} - ${integer.format(capacityPresentation.realization.high * 100)} percent`,
       { font: fonts.bodyBold, size: 9, gapAfter: 2 },
     );
-    drawAt(capacity, `SOURCE: ${capacitySource(record).toUpperCase()}`, {
+    drawAt(capacity, `SOURCE: ${capacityPresentation.sourceLabel.toUpperCase()}`, {
       font: fonts.bodyBold,
       size: 7,
       gapAfter: 8,
@@ -758,29 +936,28 @@ export async function buildAssessmentPdf(
     });
   }
   label(capacity, "Assumptions");
-  const assumptions = parseArray<string>(record.capacityAssumptionCodesJson);
   drawAt(
     capacity,
-    assumptions.length
-      ? assumptions.map((code) => ASSUMPTIONS[code] ?? "Unrecognized controlled assumption code.").join(" ")
-      : "No controlled capacity assumptions were retained.",
+    capacityPresentation.assumptions.join(" "),
     { size: 7.8, lineHeight: 10, gapAfter: 7, color: COLORS.muted },
   );
   label(capacity, "Exclusions");
-  const exclusions = parseArray<string>(record.capacityExclusionCodesJson);
   drawAt(
     capacity,
-    exclusions.length
-      ? exclusions.map((code) => EXCLUSIONS[code] ?? "Unrecognized controlled exclusion code.").join(" ")
-      : "No controlled exclusions were recorded.",
+    capacityPresentation.exclusions.join(" "),
     { size: 7.8, lineHeight: 10, color: COLORS.muted },
   );
 
-  const supported = addPage(pdf, fonts, 5, "Supported findings");
+  const supported = addPage(pdf, fonts, 5, "Risk profile");
   label(supported, "Controlled evidence and implications");
-  title(supported, "Supported findings");
-  if (findings.length) {
-    for (const finding of findings) {
+  title(supported, "Risk profile");
+  const risks = findings.filter((finding) => finding.kind === "risk");
+  const watchpoints = findings.filter(
+    (finding) => finding.kind === "watchpoint",
+  );
+  label(supported, "Supported deterministic risks");
+  if (risks.length) {
+    for (const finding of risks) {
       const definition = finding.component
         ? COMPONENTS[finding.component]
         : null;
@@ -796,11 +973,29 @@ export async function buildAssessmentPdf(
       );
     }
   } else {
-    bullet(
+    drawAt(
       supported,
-      "No supported findings retained",
-      "Evidence summary: no controlled finding code is available. Implication: interpretation is limited. Causes require validation.",
+      "No deterministic risk finding is supported by the compact record.",
+      { size: 9, lineHeight: 12, gapAfter: 9 },
     );
+  }
+  if (watchpoints.length) {
+    label(supported, "Watchpoints (not risks)");
+    for (const finding of watchpoints) {
+      const definition = finding.component
+        ? COMPONENTS[finding.component]
+        : null;
+      bullet(
+        supported,
+        findingLabel(finding),
+        `Evidence summary: ${evidenceSummary(finding)} Implication: ${
+          definition?.implication ??
+          "The finding requires controlled follow-up."
+        } Causes require validation: the aggregate result does not establish root cause.`,
+        "derived watchpoint from controlled evidence code",
+        8,
+      );
+    }
   }
   sourceKey(supported);
 
@@ -833,7 +1028,7 @@ export async function buildAssessmentPdf(
   bullet(
     methodology,
     `Methodology ${record.assessmentVersion}`,
-    `Deterministic scoring, controlled evidence reconstruction, and routing use compact retained fields. Score confidence: ${record.scoreConfidence}. Impact confidence: ${record.impactConfidence}. Coverage: ${integer.format(record.scoreCoverage * 100)} percent.`,
+    `Deterministic scoring, controlled evidence reconstruction, and routing use compact retained fields. Score confidence: ${record.scoreConfidence}. Impact confidence: ${capacityPresentation.impactConfidence}. Capacity presentation: ${capacityPresentation.status}. Coverage: ${integer.format(record.scoreCoverage * 100)} percent.`,
     "derived",
     8,
   );

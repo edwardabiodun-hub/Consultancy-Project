@@ -157,7 +157,7 @@ test("assessment PDF has the exact seven-page executive content contract", async
       "SOURCE: REALIZATION-ADJUSTED FROM EXACT INPUT",
     ],
     [
-      "Supported findings",
+      "Risk profile",
       "Evidence summary",
       "Implication",
       "Causes require validation",
@@ -231,6 +231,140 @@ test("capacity page distinguishes banded, unavailable, and inconsistent records"
   });
   assert.match(inconsistent.pages[3], /Inconsistent retained estimate/i);
   assert.doesNotMatch(inconsistent.pages[3], /0\s*-\s*0/);
+
+  const unavailableWithWrongSource = await inspectPdf({
+    ...baseRecord,
+    estimateType: "unavailable",
+    impactConfidence: "low",
+    capacityInputSource: "exact",
+    realizationFactorLow: null,
+    realizationFactorHigh: null,
+    recoverableHoursLow: null,
+    recoverableHoursHigh: null,
+    annualValueLow: null,
+    annualValueHigh: null,
+  });
+  assert.match(
+    unavailableWithWrongSource.pages[3],
+    /Inconsistent retained estimate/i,
+  );
+});
+
+test("missing and migration-default capacity tuples suppress numbers on pages two and four", async () => {
+  const fixtures = [
+    {
+      ...baseRecord,
+      recoverableHoursLow: null,
+      annualValueHigh: null,
+    },
+    {
+      ...baseRecord,
+      capacityInputSource: "none",
+      ownerGrossHours: 0,
+      reportingGrossHours: 0,
+      reworkGrossHours: 0,
+      realizationFactorLow: null,
+      realizationFactorHigh: null,
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const pdf = await inspectPdf(fixture);
+    for (const pageIndex of [1, 3]) {
+      assert.match(pdf.pages[pageIndex], /Inconsistent retained estimate/i);
+      assert.doesNotMatch(pdf.pages[pageIndex], /\$/);
+      assert.doesNotMatch(
+        pdf.pages[pageIndex],
+        /\d[\d,]*\s*-\s*\d[\d,]*\s+recoverable hours/i,
+      );
+    }
+  }
+});
+
+test("component claims are gated by matching controlled finding kinds", async () => {
+  const mixed = await inspectPdf(baseRecord);
+  const page = mixed.pages[2];
+  const owner = page.slice(
+    page.indexOf("Owner independence:"),
+    page.indexOf("Operating-system maturity:"),
+  );
+  const operating = page.slice(
+    page.indexOf("Operating-system maturity:"),
+    page.indexOf("Information visibility:"),
+  );
+  const information = page.slice(page.indexOf("Information visibility:"));
+
+  assert.match(owner, /No controlled strength supported by the compact record/i);
+  assert.match(owner, /Controlled constraint: Self-reported:/i);
+  assert.match(operating, /No controlled strength supported by the compact record/i);
+  assert.match(operating, /Controlled constraint: Self-reported:/i);
+  assert.match(information, /Controlled strength: Self-reported:/i);
+  assert.match(
+    information,
+    /No controlled constraint supported by the compact record/i,
+  );
+
+  const incomplete = await inspectPdf({
+    ...baseRecord,
+    ownerIndependenceScore: null,
+    operatingSystemScore: null,
+    informationVisibilityScore: null,
+    findingsJson: "[]",
+  });
+  assert.equal(
+    (
+      incomplete.pages[2].match(
+        /No controlled strength supported by the compact record/gi,
+      ) ?? []
+    ).length,
+    3,
+  );
+  assert.equal(
+    (
+      incomplete.pages[2].match(
+        /No controlled constraint supported by the compact record/gi,
+      ) ?? []
+    ).length,
+    3,
+  );
+  assert.doesNotMatch(incomplete.pages[2], /practices are present/i);
+});
+
+test("risk profile preserves risk, watchpoint, and strength semantics", async () => {
+  const mixed = await inspectPdf(baseRecord);
+  assert.match(mixed.pages[4], /Risk profile/i);
+  assert.match(mixed.pages[4], /Supported deterministic risks/i);
+  assert.match(mixed.pages[4], /Owner decision concentration/i);
+  assert.match(mixed.pages[4], /Watchpoints \(not risks\)/i);
+  assert.match(mixed.pages[4], /Operating-system watchpoint/i);
+  assert.doesNotMatch(mixed.pages[4], /Information visibility strength/i);
+
+  const strong = await inspectPdf({
+    ...baseRecord,
+    overallScore: 88,
+    findingsJson: JSON.stringify([
+      {
+        code: "owner_independence_strength",
+        kind: "strength",
+        component: "ownerIndependence",
+        evidenceQuestionId: "criticalDecisions",
+        evidenceValue: 100,
+      },
+      {
+        code: "operating_system_watchpoint",
+        kind: "watchpoint",
+        component: "operatingSystem",
+        evidenceQuestionId: "workflowDocumentation",
+        evidenceValue: 75,
+      },
+    ]),
+  });
+  assert.match(
+    strong.pages[4],
+    /No deterministic risk finding is supported by the compact record/i,
+  );
+  assert.match(strong.pages[4], /Watchpoints \(not risks\)/i);
+  assert.doesNotMatch(strong.pages[4], /Owner independence strength/i);
 });
 
 test("long unbroken respondent fields wrap without crossing the content floor", async () => {
