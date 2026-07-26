@@ -1,16 +1,33 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { buildAssessmentResult } from "../../lib/assessment/result";
 import { QUESTION_BANK } from "../../lib/assessment/questions";
 import type {
   AnswerValue,
   AssessmentAnswers,
+  CapacityInputs,
   ComponentId,
   QuestionDefinition,
 } from "../../lib/assessment/types";
 import { loadSession, saveSession } from "../../lib/assessment/session";
+import { ContactGate } from "./ContactGate";
+import type { LeadDetails } from "./ContactGate";
+import { FullResult } from "./FullResult";
+import { PrecisionInputs } from "./PrecisionInputs";
+import { PreliminaryResult } from "./PreliminaryResult";
 
-type Screen = "landing" | "context" | ComponentId | "preliminary";
+type Screen =
+  | "landing"
+  | "context"
+  | "ownerIndependence"
+  | "operatingSystem"
+  | "informationVisibility"
+  | "preliminary"
+  | "contact"
+  | "precision"
+  | "processing"
+  | "full";
 
 const EMPTY: AssessmentAnswers = {
   employeeBand: "",
@@ -70,21 +87,39 @@ function Progress({
     ? applicable.findIndex((question) => question.id === currentQuestion.id) + 1
     : 0;
   const value =
-    screen === "preliminary"
-      ? 100
-      : screen === "landing"
+    screen === "landing"
         ? 0
         : screen === "context"
           ? 5
-          : Math.max(6, Math.round((questionPosition / applicable.length) * 100));
+          : currentQuestion
+            ? Math.max(6, Math.round((questionPosition / applicable.length) * 100))
+            : 100;
+  const postAssessmentSections: Partial<Record<Screen, string>> = {
+    preliminary: "Preliminary result",
+    contact: "Contact and consent",
+    precision: "Optional precision",
+    processing: "Result processing",
+    full: "Full result",
+  };
   const section =
     screen === "landing"
       ? "Assessment overview"
       : screen === "context"
         ? "Business context"
-        : screen === "preliminary"
-          ? "Preliminary result"
-          : COMPONENTS.find((component) => component.id === screen)?.label;
+        : postAssessmentSections[screen] ??
+          COMPONENTS.find((component) => component.id === screen)?.label;
+  const status =
+    screen === "preliminary"
+      ? "Answers complete"
+      : screen === "contact"
+        ? "Unlock full result"
+        : screen === "precision"
+          ? "Optional estimate inputs"
+          : screen === "processing"
+            ? "Applying deterministic rules"
+            : screen === "full"
+              ? "Assessment complete"
+              : "Owner to system";
 
   return (
     <div className="assessment-progress-wrap">
@@ -93,9 +128,7 @@ function Progress({
         <span>
           {currentQuestion
             ? `Question ${questionPosition} of ${applicable.length}`
-            : screen === "preliminary"
-              ? "Answers complete"
-              : "Owner to system"}
+            : status}
         </span>
       </div>
       <div
@@ -172,6 +205,7 @@ export function AssessmentFlow() {
   });
   const [screen, setScreen] = useState<Screen>("landing");
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [, setLeadDetails] = useState<LeadDetails | null>(null);
   const stepRef = useRef<HTMLElement>(null);
   const previousStep = useRef<{ screen: Screen; questionIndex: number } | null>(null);
 
@@ -190,6 +224,12 @@ export function AssessmentFlow() {
     }
   }, [questionIndex, screen]);
 
+  useEffect(() => {
+    if (screen !== "processing") return;
+    const timer = window.setTimeout(() => setScreen("full"), 0);
+    return () => window.clearTimeout(timer);
+  }, [screen]);
+
   const applicable = useMemo(
     () => QUESTION_BANK.filter((question) => question.required || question.appliesWhen?.(answers)),
     [answers],
@@ -204,6 +244,7 @@ export function AssessmentFlow() {
     [applicable, screen],
   );
   const currentQuestion = screenQuestions[questionIndex];
+  const result = useMemo(() => buildAssessmentResult(answers), [answers]);
 
   const updateContext = <Key extends keyof AssessmentAnswers>(
     key: Key,
@@ -217,6 +258,11 @@ export function AssessmentFlow() {
       ...current,
       scored: { ...current.scored, [id]: value },
     }));
+  };
+
+  const continueWithCapacity = (capacity: CapacityInputs) => {
+    setAnswers((current) => ({ ...current, capacity }));
+    setScreen("processing");
   };
 
   const startComponent = (component: ComponentId, index = 0) => {
@@ -264,6 +310,8 @@ export function AssessmentFlow() {
       return;
     }
     if (screen === "context") setScreen("landing");
+    if (screen === "contact") setScreen("preliminary");
+    if (screen === "precision") setScreen("contact");
     if (screen === "preliminary") {
       const previous = COMPONENTS.at(-1);
       if (previous) {
@@ -534,30 +582,48 @@ export function AssessmentFlow() {
           )}
 
         {screen === "preliminary" && (
+          <PreliminaryResult
+            answers={answers}
+            result={result}
+            onUnlock={() => setScreen("contact")}
+            onReview={() => startComponent("ownerIndependence")}
+          />
+        )}
+
+        {screen === "contact" && (
+          <ContactGate
+            onBack={goBack}
+            onSubmit={(lead) => {
+              setLeadDetails(lead);
+              setScreen("precision");
+            }}
+          />
+        )}
+
+        {screen === "precision" && (
+          <PrecisionInputs
+            onBack={goBack}
+            onUseEarlierRanges={() => setScreen("processing")}
+            onSkip={() =>
+              continueWithCapacity({ source: "none", activities: [] })
+            }
+            onComplete={continueWithCapacity}
+          />
+        )}
+
+        {screen === "processing" && (
           <>
-            <div className="assessment-kicker">Assessment complete</div>
-            <h1>Your operating picture is ready.</h1>
-            <p className="assessment-lede">
-              Your answers have been saved in this browser session. The next screen will translate
-              them into a scored preliminary result and practical priorities.
+            <div className="assessment-kicker">Applying deterministic rules</div>
+            <h1>Preparing your full assessment.</h1>
+            <p className="assessment-lede" role="status">
+              Recalculating scores, capacity confidence, risks, priorities, and the appropriate
+              next step from your submitted information.
             </p>
-            <div className="assessment-promise">
-              <p>
-                Before viewing the result, you can revisit any answer without losing the rest of
-                your work.
-              </p>
-            </div>
-            <div className="assessment-actions assessment-actions-split">
-              <button
-                className="assessment-back"
-                type="button"
-                onClick={() => startComponent("ownerIndependence")}
-              >
-                Review answers
-              </button>
-              <span className="assessment-next-note">Preliminary result follows</span>
-            </div>
           </>
+        )}
+
+        {screen === "full" && (
+          <FullResult result={result} />
         )}
       </section>
     </div>

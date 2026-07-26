@@ -70,7 +70,7 @@ const answerCurrentQuestion = async (user, optionIndex = 0) => {
 
 const finishAssessment = async (user, seenPrompts = []) => {
   let safety = 0;
-  while (!screen.queryByRole("heading", { name: "Your operating picture is ready." })) {
+  while (!screen.queryByRole("button", { name: "Unlock my full assessment" })) {
     const question = screen.getByRole("group");
     seenPrompts.push(question.textContent);
     await answerCurrentQuestion(user);
@@ -170,7 +170,7 @@ test("Back and Review answers retain scored selections", async () => {
 
   await user.click(screen.getByRole("button", { name: "Continue" }));
   await finishAssessment(user);
-  await user.click(screen.getByRole("button", { name: "Review answers" }));
+  await user.click(screen.getByRole("button", { name: "Review my answers" }));
   assert.equal(screen.getByRole("radio", { name: selectedLabel }).checked, true);
 });
 
@@ -245,6 +245,47 @@ test("focus moves for Start, Continue, Back, component changes, completion, and 
 
   await finishAssessment(user);
   assert.equal(document.activeElement, step);
-  await user.click(screen.getByRole("button", { name: "Review answers" }));
+  await user.click(screen.getByRole("button", { name: "Review my answers" }));
   assert.equal(document.activeElement, step);
+});
+
+test("valid contact details unlock the full result when precision is skipped", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  const step = screen.getByRole("region", { name: "Assessment step" });
+
+  await user.click(screen.getByRole("button", { name: "Start the assessment" }));
+  await fillRequiredContext(user);
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await finishAssessment(user);
+
+  assert.ok(screen.getByRole("heading", { name: "0 out of 100" }));
+  assert.equal(document.body.textContent.includes("$"), false);
+  await user.click(screen.getByRole("button", { name: "Unlock my full assessment" }));
+  assert.ok(screen.getByRole("heading", { name: "Where should we send your report?" }));
+  assert.equal(document.activeElement, step);
+
+  await user.type(screen.getByRole("textbox", { name: "Name" }), "Eddie Example");
+  await user.type(screen.getByRole("textbox", { name: "Work email" }), "eddie@example.com");
+  await user.type(screen.getByRole("textbox", { name: "Company" }), "Example Co");
+  await user.click(
+    screen.getByRole("checkbox", { name: /generate and email my assessment report/i }),
+  );
+  await user.click(screen.getByRole("button", { name: "Continue to full assessment" }));
+
+  assert.ok(screen.getByRole("heading", { name: "Improve the capacity estimate." }));
+  assert.equal(document.activeElement, step);
+  await user.click(screen.getByRole("button", { name: "Skip financial estimate" }));
+
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  assert.equal(document.activeElement, step);
+  assert.equal(
+    within(screen.getByRole("list", { name: "Component scores" })).getAllByRole("listitem")
+      .length,
+    3,
+  );
+  assert.match(document.body.textContent, /No financial estimate is available/i);
+  assert.ok(
+    screen.getByRole("link", { name: "Discuss the Business Independence Diagnostic" }),
+  );
 });
