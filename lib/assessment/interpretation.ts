@@ -26,7 +26,7 @@ export const PRIORITY_LIBRARY: Record<ComponentId, Priority> = {
   },
 };
 
-const SUFFICIENT_EMPLOYEE_BANDS = new Set(["10-49", "20-49"]);
+const SUFFICIENT_EMPLOYEE_BANDS = new Set(["20-49", "50-99", "100+"]);
 
 export function interpretAssessment(score: ScoreResult, answers: AssessmentAnswers): AssessmentInterpretation {
   const ranked = (Object.entries(score.components) as [ComponentId, ScoreResult["components"][ComponentId]][])
