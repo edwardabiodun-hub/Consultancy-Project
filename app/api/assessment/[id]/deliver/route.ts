@@ -5,6 +5,7 @@ import {
   buildAssessmentPdf,
   type AssessmentReportRecord,
 } from "../../../../../lib/report/pdf";
+import { assessmentReportColumns } from "../../../../../lib/assessment/query";
 
 export type AssessmentDeliveryRecord = AssessmentReportRecord & {
   workEmail: string | null;
@@ -62,40 +63,9 @@ const findAssessmentDeliveryRecord = async (
   ]);
   const [record] = await getDb()
     .select({
-      id: assessmentRecords.id,
-      assessmentVersion: assessmentRecords.assessmentVersion,
-      createdAt: assessmentRecords.createdAt,
-      name: assessmentRecords.name,
-      company: assessmentRecords.company,
+      ...assessmentReportColumns(assessmentRecords),
       workEmail: assessmentRecords.workEmail,
       reportConsent: assessmentRecords.reportConsent,
-      overallScore: assessmentRecords.overallScore,
-      ownerIndependenceScore: assessmentRecords.ownerIndependenceScore,
-      operatingSystemScore: assessmentRecords.operatingSystemScore,
-      informationVisibilityScore: assessmentRecords.informationVisibilityScore,
-      scoreCoverage: assessmentRecords.scoreCoverage,
-      scoreConfidence: assessmentRecords.scoreConfidence,
-      impactConfidence: assessmentRecords.impactConfidence,
-      estimateType: assessmentRecords.estimateType,
-      capacityInputSource: assessmentRecords.capacityInputSource,
-      ownerGrossHours: assessmentRecords.ownerGrossHours,
-      reportingGrossHours: assessmentRecords.reportingGrossHours,
-      reworkGrossHours: assessmentRecords.reworkGrossHours,
-      grossCapacityValue: assessmentRecords.grossCapacityValue,
-      realizationFactorLow: assessmentRecords.realizationFactorLow,
-      realizationFactorHigh: assessmentRecords.realizationFactorHigh,
-      recoverableHoursLow: assessmentRecords.recoverableHoursLow,
-      recoverableHoursHigh: assessmentRecords.recoverableHoursHigh,
-      annualValueLow: assessmentRecords.annualValueLow,
-      annualValueHigh: assessmentRecords.annualValueHigh,
-      findingsJson: assessmentRecords.findingsJson,
-      capacityAssumptionCodesJson:
-        assessmentRecords.capacityAssumptionCodesJson,
-      capacityExclusionCodesJson:
-        assessmentRecords.capacityExclusionCodesJson,
-      priorityIdsJson: assessmentRecords.priorityIdsJson,
-      leadRoute: assessmentRecords.leadRoute,
-      narrativeSource: assessmentRecords.narrativeSource,
       reportDeliveryStatus: assessmentRecords.reportDeliveryStatus,
     })
     .from(assessmentRecords)
