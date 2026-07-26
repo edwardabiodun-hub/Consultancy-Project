@@ -1,11 +1,9 @@
 import { eq } from "drizzle-orm";
-import type { assessmentRecords } from "../../../../../db/schema";
 import {
   buildAssessmentPdf,
   type AssessmentReportRecord,
 } from "../../../../../lib/report/pdf";
 
-type StoredAssessmentRecord = typeof assessmentRecords.$inferSelect;
 type RouteContext = { params: Promise<{ id: string }> };
 type HandlerDependencies = {
   findRecord: (id: string) => Promise<AssessmentReportRecord | null>;
@@ -20,13 +18,45 @@ const PRIVATE_HEADERS = {
 
 const findAssessmentRecord = async (
   id: string,
-): Promise<StoredAssessmentRecord | null> => {
+): Promise<AssessmentReportRecord | null> => {
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"),
     import("../../../../../db/schema"),
   ]);
   const [record] = await getDb()
-    .select()
+    .select({
+      id: assessmentRecords.id,
+      assessmentVersion: assessmentRecords.assessmentVersion,
+      createdAt: assessmentRecords.createdAt,
+      name: assessmentRecords.name,
+      company: assessmentRecords.company,
+      overallScore: assessmentRecords.overallScore,
+      ownerIndependenceScore: assessmentRecords.ownerIndependenceScore,
+      operatingSystemScore: assessmentRecords.operatingSystemScore,
+      informationVisibilityScore: assessmentRecords.informationVisibilityScore,
+      scoreCoverage: assessmentRecords.scoreCoverage,
+      scoreConfidence: assessmentRecords.scoreConfidence,
+      impactConfidence: assessmentRecords.impactConfidence,
+      estimateType: assessmentRecords.estimateType,
+      capacityInputSource: assessmentRecords.capacityInputSource,
+      ownerGrossHours: assessmentRecords.ownerGrossHours,
+      reportingGrossHours: assessmentRecords.reportingGrossHours,
+      reworkGrossHours: assessmentRecords.reworkGrossHours,
+      realizationFactorLow: assessmentRecords.realizationFactorLow,
+      realizationFactorHigh: assessmentRecords.realizationFactorHigh,
+      recoverableHoursLow: assessmentRecords.recoverableHoursLow,
+      recoverableHoursHigh: assessmentRecords.recoverableHoursHigh,
+      annualValueLow: assessmentRecords.annualValueLow,
+      annualValueHigh: assessmentRecords.annualValueHigh,
+      findingsJson: assessmentRecords.findingsJson,
+      capacityAssumptionCodesJson:
+        assessmentRecords.capacityAssumptionCodesJson,
+      capacityExclusionCodesJson:
+        assessmentRecords.capacityExclusionCodesJson,
+      priorityIdsJson: assessmentRecords.priorityIdsJson,
+      leadRoute: assessmentRecords.leadRoute,
+      narrativeSource: assessmentRecords.narrativeSource,
+    })
     .from(assessmentRecords)
     .where(eq(assessmentRecords.id, id))
     .limit(1);

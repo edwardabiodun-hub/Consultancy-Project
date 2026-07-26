@@ -8,6 +8,13 @@
       "when": 1785070142412,
       "tag": "0001_assessment_records",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785072938918,
+      "tag": "0002_kind_whiplash",
+      "breakpoints": true
     }
   ]
 }

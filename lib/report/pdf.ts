@@ -6,11 +6,13 @@ import {
   type PDFPage,
   type RGB,
 } from "pdf-lib";
+import { QUESTION_BANK } from "../assessment/questions";
+import type { ComponentId } from "../assessment/types";
 
 export type AssessmentReportRecord = {
   id: string;
   assessmentVersion: string;
-  createdAt?: string;
+  createdAt: string;
   name: string | null;
   company: string | null;
   overallScore: number | null;
@@ -21,25 +23,33 @@ export type AssessmentReportRecord = {
   scoreConfidence: string;
   impactConfidence: string;
   estimateType: string;
+  capacityInputSource: string;
+  ownerGrossHours: number;
+  reportingGrossHours: number;
+  reworkGrossHours: number;
+  realizationFactorLow: number | null;
+  realizationFactorHigh: number | null;
   recoverableHoursLow: number | null;
   recoverableHoursHigh: number | null;
   annualValueLow: number | null;
   annualValueHigh: number | null;
-  riskCodesJson: string;
+  findingsJson: string;
+  capacityAssumptionCodesJson: string;
+  capacityExclusionCodesJson: string;
   priorityIdsJson: string;
   leadRoute: string;
   narrativeSource: string;
 };
 
 const PAGE = { width: 612, height: 792, margin: 54 };
+const CONTENT_FLOOR = 58;
 const COLORS = {
   paper: rgb(0.984, 0.980, 0.965),
   ink: rgb(0.094, 0.137, 0.118),
-  forest: rgb(0.090, 0.247, 0.196),
+  forest: rgb(0.09, 0.247, 0.196),
   bronze: rgb(0.604, 0.412, 0.227),
   muted: rgb(0.35, 0.39, 0.36),
   rule: rgb(0.79, 0.77, 0.72),
-  white: rgb(1, 1, 1),
 };
 
 type Fonts = {
@@ -53,61 +63,70 @@ type DrawContext = {
   page: PDFPage;
   fonts: Fonts;
   y: number;
+  truncated: boolean;
 };
 
-type PriorityDefinition = {
-  title: string;
-  action: string;
-  indicator: string;
+type Finding = {
+  code: string;
+  kind: "risk" | "watchpoint" | "strength";
+  component: ComponentId | null;
+  evidenceQuestionId: string | null;
+  evidenceValue: number | "unknown" | null;
 };
 
-const COMPONENTS = [
-  ["Owner independence", "ownerIndependenceScore"],
-  ["Operating-system maturity", "operatingSystemScore"],
-  ["Information visibility", "informationVisibilityScore"],
-] as const;
+type ComponentDefinition = {
+  label: string;
+  scoreKey:
+    | "ownerIndependenceScore"
+    | "operatingSystemScore"
+    | "informationVisibilityScore";
+  strength: string;
+  constraint: string;
+  implication: string;
+};
 
-const PRIORITIES: Record<string, PriorityDefinition> = {
+const COMPONENTS: Record<ComponentId, ComponentDefinition> = {
+  ownerIndependence: {
+    label: "Owner independence",
+    scoreKey: "ownerIndependenceScore",
+    strength: "Delegated decisions or continuity practices are present at the level supported by the aggregate score.",
+    constraint: "Owner dependence remains possible until decision rights and absence continuity are validated.",
+    implication: "Unresolved owner dependence can delay routine decisions and exception handling.",
+  },
+  operatingSystem: {
+    label: "Operating-system maturity",
+    scoreKey: "operatingSystemScore",
+    strength: "Repeatable workflow, ownership, or management-cadence practices are present at the level supported by the aggregate score.",
+    constraint: "Consistency across workflows, owners, and escalation paths requires validation.",
+    implication: "Operating inconsistency can increase rework, handoff friction, and management intervention.",
+  },
+  informationVisibility: {
+    label: "Information visibility",
+    scoreKey: "informationVisibilityScore",
+    strength: "Decision information or KPI practices are present at the level supported by the aggregate score.",
+    constraint: "Timeliness, trust, and action ownership require validation before treating information as decision-ready.",
+    implication: "Information gaps can delay detection, decisions, and corrective action.",
+  },
+};
+
+const PRIORITIES: Record<
+  ComponentId,
+  { title: string; action: string; indicator: string }
+> = {
   ownerIndependence: {
     title: "Clarify decision authority",
-    action:
-      "Define recurring decisions managers can make and the conditions requiring escalation.",
+    action: "Define recurring decisions managers can make and the conditions requiring escalation.",
     indicator: "Routine decisions resolved without owner intervention",
   },
   operatingSystem: {
     title: "Stabilize one critical workflow",
-    action:
-      "Assign an accountable owner and document decision points, handoffs, and exceptions.",
+    action: "Assign an accountable owner and document decision points, handoffs, and exceptions.",
     indicator: "Exceptions resolved through the documented workflow",
   },
   informationVisibility: {
     title: "Create a decision-ready KPI cadence",
-    action:
-      "Standardize measures, definitions, owners, and review actions used for decisions.",
-    indicator: "Management reviews completed with agreed data and owned actions",
-  },
-};
-
-const RISKS: Record<string, { title: string; description: string }> = {
-  measurement_gap: {
-    title: "Measurement gap",
-    description:
-      "Missing or unknown responses reduced the confidence supported by the retained score record.",
-  },
-  owner_bottleneck: {
-    title: "Owner decision concentration",
-    description:
-      "The retained result flags owner dependence as a material operating constraint.",
-  },
-  operating_system_gap: {
-    title: "Operating-system inconsistency",
-    description:
-      "The retained result flags inconsistency in recurring workflows, ownership, or escalation.",
-  },
-  information_bottleneck: {
-    title: "Information visibility gap",
-    description:
-      "The retained result flags delayed, incomplete, or insufficiently decision-ready information.",
+    action: "Standardize measures, definitions, owners, and review actions used for decisions.",
+    indicator: "Reviews completed with agreed data and owned actions",
   },
 };
 
@@ -115,28 +134,66 @@ const ROUTES: Record<string, { label: string; path: string; reason: string }> = 
   diagnostic: {
     label: "Discuss the Business Independence Diagnostic",
     path: "/diagnostic",
-    reason:
-      "The retained dependency profile supports a focused diagnostic conversation.",
+    reason: "The retained dependency profile supports a focused diagnostic conversation.",
   },
   nurture: {
     label: "Get the 90-Day Business Independence Checklist",
     path: "/founder-resources",
-    reason:
-      "Build operating discipline before deciding whether a diagnostic is warranted.",
+    reason: "Build operating discipline before considering a diagnostic.",
   },
   insights: {
     label: "Explore executive operating insights",
     path: "/founder-resources",
-    reason:
-      "Use focused operating insights to protect and extend current independence.",
+    reason: "Protect and extend the operating independence already indicated.",
   },
   restricted: {
     label: "Explore educational founder resources",
     path: "/founder-resources",
-    reason:
-      "The recorded professional boundary limits the report to an educational next step.",
+    reason: "The retained professional boundary limits the next step to education.",
   },
 };
+
+const ASSUMPTIONS: Record<string, string> = {
+  exclusive_category_assignment:
+    "Each activity is assigned to one category; reporting corrections are not double-counted as rework.",
+  exact_inputs: "Time, frequency, people, and cost values were entered as exact inputs.",
+  banded_midpoints:
+    "Selected self-reported ranges use their disclosed midpoints; they are not external benchmarks.",
+  realization_50_70:
+    "A 50 to 70 percent realization range is applied to eligible exact-input capacity.",
+  realization_35_55:
+    "A 35 to 55 percent realization range is applied to eligible banded-input capacity.",
+};
+
+const EXCLUSIONS: Record<string, string> = {
+  no_capacity_inputs: "No eligible capacity inputs were retained.",
+  insufficient_eligible_categories:
+    "Fewer than two complete eligible capacity categories were retained.",
+  invalid_activity_excluded:
+    "One or more incomplete or invalid activities were excluded.",
+  duplicate_activity_id:
+    "Duplicate activity identifiers caused the capacity estimate to be rejected.",
+};
+
+const FINDING_LABELS: Record<string, string> = {
+  owner_bottleneck: "Owner decision concentration",
+  owner_independence_watchpoint: "Owner independence watchpoint",
+  owner_independence_strength: "Owner independence strength",
+  operating_system_gap: "Operating-system inconsistency",
+  operating_system_watchpoint: "Operating-system watchpoint",
+  operating_system_strength: "Operating-system strength",
+  information_bottleneck: "Information visibility gap",
+  information_visibility_watchpoint: "Information visibility watchpoint",
+  information_visibility_strength: "Information visibility strength",
+  measurement_gap: "Measurement gap",
+};
+
+const integer = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
 
 const sanitize = (value: unknown) =>
   String(value ?? "")
@@ -145,37 +202,38 @@ const sanitize = (value: unknown) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-const currency = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-const parseStringArray = (value: string) => {
+const parseArray = <Value>(value: string): Value[] => {
   try {
     const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
+    return Array.isArray(parsed) ? (parsed as Value[]) : [];
   } catch {
     return [];
   }
 };
 
-const categoryFor = (score: number | null) =>
-  score === null
-    ? "Result incomplete"
-    : score >= 80
-      ? "Strong independence"
-      : score >= 65
-        ? "Emerging independence"
-        : score >= 45
-          ? "Developing independence"
-          : "High dependency";
+const splitToken = (
+  token: string,
+  font: PDFFont,
+  size: number,
+  maxWidth: number,
+) => {
+  const parts: string[] = [];
+  let remaining = token;
+  while (remaining) {
+    let part = "";
+    for (const character of remaining) {
+      if (font.widthOfTextAtSize(part + character, size) > maxWidth) break;
+      part += character;
+    }
+    if (!part) part = remaining[0];
+    parts.push(part);
+    remaining = remaining.slice(part.length);
+  }
+  return parts;
+};
 
 const wrapLines = (
   text: string,
@@ -183,48 +241,56 @@ const wrapLines = (
   size: number,
   maxWidth: number,
 ) => {
-  const paragraphs = sanitize(text).split(/\n/);
+  const tokens = sanitize(text)
+    .split(" ")
+    .filter(Boolean)
+    .flatMap((token) =>
+      font.widthOfTextAtSize(token, size) <= maxWidth
+        ? [token]
+        : splitToken(token, font, size, maxWidth),
+    );
   const lines: string[] = [];
-  for (const paragraph of paragraphs) {
-    const words = paragraph.split(" ").filter(Boolean);
-    if (!words.length) {
-      lines.push("");
-      continue;
+  let line = "";
+  for (const token of tokens) {
+    const candidate = line ? `${line} ${token}` : token;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      line = candidate;
+    } else {
+      if (line) lines.push(line);
+      line = token;
     }
-    let line = "";
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        line = candidate;
-      } else {
-        if (line) lines.push(line);
-        line = word;
-      }
-    }
-    if (line) lines.push(line);
   }
+  if (line) lines.push(line);
   return lines;
 };
 
-const drawWrapped = (
+const drawAt = (
   context: DrawContext,
   text: string,
   options: {
+    x?: number;
+    width?: number;
     font?: PDFFont;
     size?: number;
-    color?: RGB;
-    width?: number;
     lineHeight?: number;
     gapAfter?: number;
+    color?: RGB;
   } = {},
 ) => {
+  if (context.truncated) return;
+  const x = options.x ?? PAGE.margin;
+  const width = options.width ?? PAGE.width - x - PAGE.margin;
   const font = options.font ?? context.fonts.body;
-  const size = options.size ?? 11;
-  const width = options.width ?? PAGE.width - PAGE.margin * 2;
-  const lineHeight = options.lineHeight ?? size * 1.45;
-  for (const line of wrapLines(text, font, size, width)) {
+  const size = options.size ?? 10;
+  const lineHeight = options.lineHeight ?? size * 1.35;
+  const lines = wrapLines(text, font, size, width);
+  for (const line of lines) {
+    if (context.y < CONTENT_FLOOR) {
+      context.truncated = true;
+      return;
+    }
     context.page.drawText(line, {
-      x: PAGE.margin,
+      x,
       y: context.y,
       size,
       font,
@@ -232,32 +298,34 @@ const drawWrapped = (
     });
     context.y -= lineHeight;
   }
-  context.y -= options.gapAfter ?? 8;
+  context.y -= options.gapAfter ?? 7;
 };
 
-const drawSectionLabel = (context: DrawContext, text: string) => {
-  context.page.drawText(sanitize(text).toUpperCase(), {
-    x: PAGE.margin,
-    y: context.y,
-    size: 8,
+const label = (context: DrawContext, text: string) => {
+  drawAt(context, sanitize(text).toUpperCase(), {
     font: context.fonts.bodyBold,
+    size: 7.5,
+    lineHeight: 10,
+    gapAfter: 9,
     color: COLORS.bronze,
-    characterSpacing: 1.2,
   });
-  context.y -= 22;
 };
 
-const drawTitle = (context: DrawContext, text: string) => {
-  drawWrapped(context, text, {
+const title = (context: DrawContext, text: string, size = 27) => {
+  drawAt(context, text, {
     font: context.fonts.displayBold,
-    size: 28,
+    size,
+    lineHeight: size + 4,
+    gapAfter: 14,
     color: COLORS.forest,
-    lineHeight: 32,
-    gapAfter: 18,
   });
 };
 
-const drawRule = (context: DrawContext, gap = 18) => {
+const rule = (context: DrawContext, gap = 14) => {
+  if (context.y < CONTENT_FLOOR) {
+    context.truncated = true;
+    return;
+  }
   context.page.drawLine({
     start: { x: PAGE.margin, y: context.y },
     end: { x: PAGE.width - PAGE.margin, y: context.y },
@@ -267,54 +335,50 @@ const drawRule = (context: DrawContext, gap = 18) => {
   context.y -= gap;
 };
 
-const drawBullet = (
+const bullet = (
   context: DrawContext,
-  title: string,
+  heading: string,
   body: string,
   source?: string,
+  size = 9,
 ) => {
+  if (context.y < CONTENT_FLOOR) {
+    context.truncated = true;
+    return;
+  }
   context.page.drawCircle({
-    x: PAGE.margin + 4,
-    y: context.y + 4,
-    size: 3,
+    x: PAGE.margin + 3,
+    y: context.y + 3,
+    size: 2.5,
     color: COLORS.bronze,
   });
-  const textX = PAGE.margin + 18;
-  context.page.drawText(sanitize(title), {
-    x: textX,
-    y: context.y,
-    size: 12,
+  drawAt(context, heading, {
+    x: PAGE.margin + 15,
+    width: PAGE.width - PAGE.margin * 2 - 15,
     font: context.fonts.bodyBold,
-    color: COLORS.ink,
+    size: size + 1,
+    lineHeight: size + 3,
+    gapAfter: 3,
   });
-  context.y -= 18;
-  for (const line of wrapLines(
-    body,
-    context.fonts.body,
-    10,
-    PAGE.width - textX - PAGE.margin,
-  )) {
-    context.page.drawText(line, {
-      x: textX,
-      y: context.y,
-      size: 10,
-      font: context.fonts.body,
-      color: COLORS.muted,
-    });
-    context.y -= 14;
-  }
+  drawAt(context, body, {
+    x: PAGE.margin + 15,
+    width: PAGE.width - PAGE.margin * 2 - 15,
+    size,
+    lineHeight: size + 3,
+    gapAfter: source ? 2 : 9,
+    color: COLORS.muted,
+  });
   if (source) {
-    context.page.drawText(`SOURCE: ${sanitize(source).toUpperCase()}`, {
-      x: textX,
-      y: context.y - 1,
-      size: 7.5,
+    drawAt(context, `SOURCE: ${source.toUpperCase()}`, {
+      x: PAGE.margin + 15,
+      width: PAGE.width - PAGE.margin * 2 - 15,
       font: context.fonts.bodyBold,
+      size: 7,
+      lineHeight: 9,
+      gapAfter: 9,
       color: COLORS.bronze,
-      characterSpacing: 0.7,
     });
-    context.y -= 16;
   }
-  context.y -= 12;
 };
 
 const addPage = (
@@ -334,15 +398,18 @@ const addPage = (
   page.drawText("BUSINESS INDEPENDENCE ASSESSMENT", {
     x: PAGE.margin,
     y: PAGE.height - 35,
-    size: 7.5,
+    size: 7,
     font: fonts.bodyBold,
     color: COLORS.forest,
-    characterSpacing: 1,
   });
-  page.drawText(sanitize(section).toUpperCase(), {
-    x: PAGE.width - PAGE.margin - fonts.body.widthOfTextAtSize(section.toUpperCase(), 7.5),
+  const header = sanitize(section).toUpperCase();
+  page.drawText(header, {
+    x:
+      PAGE.width -
+      PAGE.margin -
+      fonts.body.widthOfTextAtSize(header, 7),
     y: PAGE.height - 35,
-    size: 7.5,
+    size: 7,
     font: fonts.body,
     color: COLORS.muted,
   });
@@ -358,26 +425,95 @@ const addPage = (
     size: 7,
     font: fonts.body,
     color: COLORS.muted,
-    characterSpacing: 0.5,
   });
-  return { page, fonts, y: PAGE.height - 88 };
+  return { page, fonts, y: PAGE.height - 78, truncated: false };
 };
 
-const drawSourceKey = (context: DrawContext) => {
-  drawRule(context, 16);
-  drawWrapped(
-    context,
-    "Estimate source key: exact input = entered values; banded input = selected range midpoint; derived = deterministic scoring; realization-adjusted = modeled range applied to retained capacity inputs.",
-    { size: 8.5, color: COLORS.muted, lineHeight: 12, gapAfter: 0 },
-  );
+const categoryFor = (score: number | null) =>
+  score === null
+    ? "Result incomplete"
+    : score >= 80
+      ? "Strong independence"
+      : score >= 65
+        ? "Emerging independence"
+        : score >= 45
+          ? "Developing independence"
+          : "High dependency";
+
+const formatDate = (value: string) => {
+  const match = sanitize(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return "Date not retained";
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  return `${months[Number(match[2]) - 1]} ${Number(match[3])}, ${match[1]}`;
 };
+
+const evidenceSummary = (finding: Finding) => {
+  if (!finding.evidenceQuestionId) {
+    return "The retained record indicates a measurement gap; question-level evidence is unavailable.";
+  }
+  const question = QUESTION_BANK.find(
+    (candidate) => candidate.id === finding.evidenceQuestionId,
+  );
+  const option = question?.options.find(
+    (candidate) => candidate.value === finding.evidenceValue,
+  );
+  if (!question || !option) {
+    return "The retained controlled evidence code could not be matched to the approved question bank.";
+  }
+  return `Self-reported: ${question.prompt} ${option.label}.`;
+};
+
+const findingLabel = (finding: Finding) =>
+  FINDING_LABELS[finding.code] ??
+  (finding.component
+    ? `${COMPONENTS[finding.component].label} ${finding.kind}`
+    : "Controlled finding");
 
 const capacitySource = (record: AssessmentReportRecord) =>
-  record.estimateType === "calculated"
+  record.capacityInputSource === "exact"
     ? "realization-adjusted from exact input"
-    : record.estimateType === "directional"
+    : record.capacityInputSource === "banded"
       ? "realization-adjusted from banded input"
       : "unavailable";
+
+const capacityInputLabel = (source: string) =>
+  source === "exact"
+    ? "EXACT INPUT"
+    : source === "banded"
+      ? "BANDED INPUT"
+      : "NO CAPACITY INPUT";
+
+const estimateIsComplete = (record: AssessmentReportRecord) =>
+  [
+    record.realizationFactorLow,
+    record.realizationFactorHigh,
+    record.recoverableHoursLow,
+    record.recoverableHoursHigh,
+    record.annualValueLow,
+    record.annualValueHigh,
+  ].every(isFiniteNumber);
+
+const sourceKey = (context: DrawContext) => {
+  rule(context, 10);
+  drawAt(
+    context,
+    "Estimate source key: exact input = entered values; banded input = selected range midpoint; derived = deterministic scoring; realization-adjusted = modeled range applied to retained capacity inputs.",
+    { size: 7.5, lineHeight: 10, gapAfter: 0, color: COLORS.muted },
+  );
+};
 
 export async function buildAssessmentPdf(
   record: AssessmentReportRecord,
@@ -390,9 +526,22 @@ export async function buildAssessmentPdf(
     displayBold: await pdf.embedFont(StandardFonts.TimesRomanBold),
   };
   pdf.setTitle("Business Independence Assessment - Executive Summary");
-  pdf.setSubject("Rules-based executive assessment reconstructed from a compact record");
+  pdf.setSubject("Controlled executive report reconstructed from a compact record");
   pdf.setCreator("Business Independence Assessment");
   pdf.setProducer("pdf-lib");
+
+  const findings = parseArray<Finding>(record.findingsJson)
+    .filter(
+      (finding) =>
+        finding &&
+        typeof finding.code === "string" &&
+        ["risk", "watchpoint", "strength"].includes(finding.kind),
+    )
+    .slice(0, 3);
+  const priorities = parseArray<string>(record.priorityIdsJson)
+    .filter((id): id is ComponentId => id in PRIORITIES)
+    .slice(0, 3);
+  const route = ROUTES[record.leadRoute] ?? ROUTES.nurture;
 
   const cover = addPage(pdf, fonts, 1, "Executive report");
   cover.page.drawRectangle({
@@ -402,326 +551,322 @@ export async function buildAssessmentPdf(
     height: PAGE.height,
     color: COLORS.forest,
   });
-  drawSectionLabel(cover, "Private executive summary");
-  drawTitle(cover, "Business Independence Assessment");
-  drawWrapped(
+  label(cover, "Private executive summary");
+  title(cover, "Business Independence Assessment", 29);
+  drawAt(cover, `Respondent: ${record.name ?? "Not retained"}`, {
+    font: fonts.display,
+    size: 15,
+    lineHeight: 19,
+    gapAfter: 4,
+    color: COLORS.muted,
+  });
+  drawAt(cover, `Company: ${record.company ?? "Not retained"}`, {
+    font: fonts.display,
+    size: 15,
+    lineHeight: 19,
+    gapAfter: 4,
+    color: COLORS.muted,
+  });
+  drawAt(cover, `Assessment date: ${formatDate(record.createdAt)}`, {
+    size: 10,
+    gapAfter: 20,
+    color: COLORS.muted,
+  });
+  drawAt(
     cover,
-    record.company
-      ? `Prepared for ${sanitize(record.company)}`
-      : "Prepared from the retained assessment record",
+    record.overallScore === null
+      ? "Result incomplete"
+      : `${integer.format(record.overallScore)} / 100`,
     {
-      font: fonts.display,
-      size: 16,
-      color: COLORS.muted,
-      lineHeight: 21,
-      gapAfter: 28,
+      font: fonts.displayBold,
+      size: 38,
+      lineHeight: 42,
+      gapAfter: 2,
+      color: COLORS.forest,
     },
   );
-  if (record.overallScore === null) {
-    drawWrapped(cover, "Result incomplete", {
-      font: fonts.displayBold,
-      size: 32,
-      color: COLORS.forest,
-      lineHeight: 36,
-      gapAfter: 4,
-    });
-  } else {
-    drawWrapped(cover, `${number.format(record.overallScore)} / 100`, {
-      font: fonts.displayBold,
-      size: 40,
-      color: COLORS.forest,
-      lineHeight: 44,
-      gapAfter: 4,
-    });
-  }
-  drawWrapped(cover, `${categoryFor(record.overallScore)} | derived`, {
+  drawAt(cover, `${categoryFor(record.overallScore)} | SOURCE: DERIVED`, {
     font: fonts.bodyBold,
-    size: 10,
+    size: 9,
+    gapAfter: 20,
     color: COLORS.bronze,
-    lineHeight: 14,
-    gapAfter: 26,
   });
-  drawRule(cover, 20);
-  drawWrapped(
+  rule(cover);
+  drawAt(
     cover,
-    `Score confidence: ${sanitize(record.scoreConfidence)} | Impact confidence: ${sanitize(record.impactConfidence)}`,
-    { font: fonts.bodyBold, size: 11, gapAfter: 12 },
+    `Score confidence: ${record.scoreConfidence} | Impact confidence: ${record.impactConfidence}`,
+    { font: fonts.bodyBold, size: 10, gapAfter: 8 },
   );
-  drawWrapped(
+  drawAt(
     cover,
-    `Assessment ID: ${sanitize(record.id)} | Methodology ${sanitize(record.assessmentVersion)}`,
-    { size: 9, color: COLORS.muted, gapAfter: 22 },
+    "Self-reported note: This assessment applies deterministic rules to self-reported information. It is not an audit or independent validation.",
+    { size: 9.5, lineHeight: 13, gapAfter: 8, color: COLORS.muted },
   );
-  drawWrapped(
+  drawAt(
     cover,
-    "This report is reconstructed only from the compact retained assessment record. Raw answers, detailed evidence, and the original narrative are not stored and are not reproduced.",
-    { size: 10, color: COLORS.muted, lineHeight: 14 },
+    "The report is reconstructed from controlled compact fields. Raw answers and free-text narratives are not retained.",
+    { size: 9, lineHeight: 12, color: COLORS.muted },
   );
 
   const summary = addPage(pdf, fonts, 2, "Executive summary");
-  drawSectionLabel(summary, "What the retained record supports");
-  drawTitle(summary, "Executive summary");
-  const weakest = COMPONENTS
-    .map(([label, key]) => ({ label, score: record[key] }))
-    .filter((item): item is { label: string; score: number } =>
-      isFiniteNumber(item.score),
-    )
-    .sort((left, right) => left.score - right.score)[0];
-  drawWrapped(
+  label(summary, "Decision view");
+  title(summary, "Executive summary");
+  drawAt(
     summary,
-    record.overallScore === null
-      ? "The retained record does not support a complete overall score. Use the component evidence and confidence limits before setting priorities."
-      : `The deterministic score indicates ${categoryFor(record.overallScore).toLowerCase()}. ${
-          weakest
-            ? `${weakest.label} is the lowest retained component and the first logical focus.`
-            : "Component detail is incomplete."
-        }`,
-    { font: fonts.display, size: 17, lineHeight: 23, gapAfter: 24 },
+    `${categoryFor(record.overallScore)} is indicated with ${record.scoreConfidence} score confidence.`,
+    { font: fonts.display, size: 15, lineHeight: 20, gapAfter: 12 },
   );
-  drawBullet(
+  label(summary, "Top supported findings");
+  if (findings.length) {
+    for (const finding of findings) {
+      bullet(
+        summary,
+        findingLabel(finding),
+        evidenceSummary(finding),
+        "derived from controlled evidence code",
+        8,
+      );
+    }
+  } else {
+    bullet(
+      summary,
+      "No supported findings retained",
+      "Complete the evidence base before interpreting operating constraints.",
+    );
+  }
+  label(summary, "Capacity signal");
+  drawAt(
     summary,
-    "Overall independence",
-    record.overallScore === null
-      ? "No supported overall score is retained."
-      : `${number.format(record.overallScore)} out of 100 with ${sanitize(record.scoreConfidence)} confidence.`,
-    "derived",
-  );
-  drawBullet(
-    summary,
-    "Evidence coverage",
-    isFiniteNumber(record.scoreCoverage)
-      ? `${number.format(record.scoreCoverage * 100)} percent of weighted score evidence was retained as covered.`
-      : "Coverage was not available.",
-    "derived",
-  );
-  drawBullet(
-    summary,
-    "Capacity signal",
     record.estimateType === "unavailable"
-      ? "The retained record does not support a recoverable-hours or financial range."
-      : `${number.format(record.recoverableHoursLow ?? 0)} to ${number.format(record.recoverableHoursHigh ?? 0)} recoverable hours are recorded, with ${sanitize(record.impactConfidence)} impact confidence.`,
-    capacitySource(record),
+      ? "No supported financial capacity estimate is retained."
+      : `${integer.format(record.recoverableHoursLow ?? 0)} - ${integer.format(record.recoverableHoursHigh ?? 0)} recoverable hours; ${currency.format(record.annualValueLow ?? 0)} - ${currency.format(record.annualValueHigh ?? 0)} annual capacity value.`,
+    { size: 9, lineHeight: 12, gapAfter: 4 },
   );
-  drawSourceKey(summary);
+  drawAt(summary, `SOURCE: ${capacitySource(record).toUpperCase()}`, {
+    font: fonts.bodyBold,
+    size: 7,
+    gapAfter: 9,
+    color: COLORS.bronze,
+  });
+  label(summary, "Routed next step");
+  drawAt(summary, `${route.label} - ${route.reason} Route: ${route.path}`, {
+    size: 9,
+    lineHeight: 12,
+  });
 
   const components = addPage(pdf, fonts, 3, "Component scores");
-  drawSectionLabel(components, "Operating independence profile");
-  drawTitle(components, "Component scores");
-  drawWrapped(
+  label(components, "Controlled component view");
+  title(components, "Component scores");
+  drawAt(
     components,
-    "Each component is a deterministic result from the submitted assessment. The compact record retains scores, not the individual answers behind them.",
-    { size: 10.5, color: COLORS.muted, lineHeight: 15, gapAfter: 20 },
+    `Score confidence: ${record.scoreConfidence} | Coverage: ${integer.format(record.scoreCoverage * 100)} percent | SOURCE: DERIVED`,
+    { font: fonts.bodyBold, size: 8.5, gapAfter: 10, color: COLORS.bronze },
   );
-  for (const [label, key] of COMPONENTS) {
-    const score = record[key];
-    components.page.drawText(label, {
-      x: PAGE.margin,
-      y: components.y,
-      size: 12,
-      font: fonts.bodyBold,
-      color: COLORS.ink,
-    });
-    const scoreLabel = score === null ? "Incomplete" : `${number.format(score)} / 100`;
-    components.page.drawText(scoreLabel, {
-      x: PAGE.width - PAGE.margin - fonts.bodyBold.widthOfTextAtSize(scoreLabel, 12),
-      y: components.y,
-      size: 12,
-      font: fonts.bodyBold,
-      color: COLORS.forest,
-    });
-    components.y -= 18;
-    components.page.drawRectangle({
-      x: PAGE.margin,
-      y: components.y,
-      width: PAGE.width - PAGE.margin * 2,
-      height: 9,
-      color: rgb(0.88, 0.87, 0.83),
-    });
-    if (score !== null) {
-      components.page.drawRectangle({
-        x: PAGE.margin,
-        y: components.y,
-        width: (PAGE.width - PAGE.margin * 2) * Math.max(0, Math.min(100, score)) / 100,
-        height: 9,
-        color: COLORS.forest,
-      });
-    }
-    components.y -= 28;
-    drawWrapped(
+  for (const [componentId, definition] of Object.entries(COMPONENTS) as [
+    ComponentId,
+    ComponentDefinition,
+  ][]) {
+    const score = record[definition.scoreKey];
+    drawAt(
       components,
-      `${categoryFor(score)} | Source: derived`,
-      { size: 9, color: COLORS.muted, lineHeight: 12, gapAfter: 20 },
+      `${definition.label}: ${score === null ? "Incomplete" : `${integer.format(score)} / 100`}`,
+      { font: fonts.bodyBold, size: 11, gapAfter: 2, color: COLORS.forest },
+    );
+    drawAt(components, `Controlled strength: ${definition.strength}`, {
+      size: 7.8,
+      lineHeight: 10,
+      gapAfter: 2,
+    });
+    drawAt(components, `Controlled constraint: ${definition.constraint}`, {
+      size: 7.8,
+      lineHeight: 10,
+      gapAfter: 2,
+    });
+    const finding = findings.find(
+      (candidate) => candidate.component === componentId,
+    );
+    drawAt(
+      components,
+      `Evidence basis: ${finding ? evidenceSummary(finding) : "Aggregate component score only; question-level evidence was not retained for this component finding."}`,
+      { size: 7.8, lineHeight: 10, gapAfter: 8, color: COLORS.muted },
     );
   }
-  drawSourceKey(components);
+  sourceKey(components);
 
   const capacity = addPage(pdf, fonts, 4, "Recoverable capacity");
-  drawSectionLabel(capacity, "Bounded operating estimate");
-  drawTitle(capacity, "Recoverable capacity");
-  if (
-    record.estimateType === "unavailable" ||
-    !isFiniteNumber(record.recoverableHoursLow) ||
-    !isFiniteNumber(record.recoverableHoursHigh) ||
-    !isFiniteNumber(record.annualValueLow) ||
-    !isFiniteNumber(record.annualValueHigh)
-  ) {
-    drawWrapped(
-      capacity,
-      "No financial estimate is available from the compact retained record.",
-      { font: fonts.display, size: 19, lineHeight: 25, gapAfter: 22 },
-    );
-    drawBullet(
-      capacity,
-      "What is missing",
-      "A supported range requires complete time, frequency, people, and cost inputs across eligible operating categories.",
-    );
-    drawBullet(
-      capacity,
-      "What not to infer",
-      "No benchmark, market value, savings claim, or placeholder financial estimate has been inserted.",
-    );
-    drawBullet(
-      capacity,
-      "Recommended evidence",
-      "Capture exact inputs or complete self-reported bands, then rerun the deterministic calculation.",
-    );
-  } else {
-    drawWrapped(
-      capacity,
-      `${number.format(record.recoverableHoursLow)} - ${number.format(record.recoverableHoursHigh)} hours`,
-      { font: fonts.displayBold, size: 29, color: COLORS.forest, lineHeight: 34, gapAfter: 2 },
-    );
-    drawWrapped(capacity, "Estimated recoverable capacity per year", {
-      font: fonts.bodyBold,
-      size: 10,
-      color: COLORS.muted,
-      gapAfter: 22,
-    });
-    drawWrapped(
-      capacity,
-      `${currency.format(record.annualValueLow)} - ${currency.format(record.annualValueHigh)}`,
-      { font: fonts.displayBold, size: 29, color: COLORS.forest, lineHeight: 34, gapAfter: 2 },
-    );
-    drawWrapped(capacity, "Estimated annual capacity value", {
-      font: fonts.bodyBold,
-      size: 10,
-      color: COLORS.muted,
-      gapAfter: 26,
-    });
-    drawBullet(
-      capacity,
-      "Estimate source",
-      record.estimateType === "calculated"
-        ? "Retained exact-input calculation with a modeled realization range."
-        : "Retained banded-input midpoint calculation with a modeled realization range.",
-      capacitySource(record),
-    );
-    drawBullet(
-      capacity,
-      "Interpretation",
-      "The range represents potential operating capacity, not guaranteed savings, cash release, or revenue.",
-    );
-  }
-  drawSourceKey(capacity);
-
-  const risk = addPage(pdf, fonts, 5, "Risk profile");
-  drawSectionLabel(risk, "Retained operating signals");
-  drawTitle(risk, "Risk profile");
-  drawWrapped(
-    risk,
-    "Risk codes are retained outputs of the rules engine. Because raw answers are not stored, this report does not recreate question-level evidence.",
-    { size: 10.5, color: COLORS.muted, lineHeight: 15, gapAfter: 20 },
-  );
-  const riskCodes = parseStringArray(record.riskCodesJson).slice(0, 3);
-  if (riskCodes.length) {
-    for (const code of riskCodes) {
-      const definition = RISKS[code] ?? {
-        title: sanitize(code).replaceAll("_", " "),
-        description:
-          "This retained rules-engine code requires validation against current operating evidence.",
-      };
-      drawBullet(risk, definition.title, definition.description, "derived");
-    }
-  } else {
-    drawBullet(
-      risk,
-      "No retained risk codes",
-      "The compact record contains no supported risk codes. This is not evidence that operating risk is absent.",
-    );
-  }
-  drawSourceKey(risk);
-
-  const priorities = addPage(pdf, fonts, 6, "90-day direction");
-  drawSectionLabel(priorities, "Controlled action sequence");
-  drawTitle(priorities, "90-day priority direction");
-  drawWrapped(
-    priorities,
-    "Treat these as validation-led directions. Confirm ownership, baseline measures, and operating evidence before committing resources.",
-    { size: 10.5, color: COLORS.muted, lineHeight: 15, gapAfter: 16 },
-  );
-  const priorityIds = parseStringArray(record.priorityIdsJson)
-    .filter((id) => id in PRIORITIES)
-    .slice(0, 3);
-  if (priorityIds.length) {
-    priorityIds.forEach((id, index) => {
-      const priority = PRIORITIES[id];
-      drawBullet(
-        priorities,
-        `${index + 1}. ${priority.title}`,
-        `${priority.action} Leading indicator: ${priority.indicator}.`,
-        "derived",
-      );
-    });
-  } else {
-    drawBullet(
-      priorities,
-      "Complete the evidence base",
-      "Validate missing component evidence before selecting an operating priority.",
-    );
-  }
-  drawSourceKey(priorities);
-
-  const methodology = addPage(pdf, fonts, 7, "Methodology and next step");
-  drawSectionLabel(methodology, "Boundary and routing");
-  drawTitle(methodology, "Methodology, limitations, and next step");
-  drawBullet(
-    methodology,
-    `Methodology ${sanitize(record.assessmentVersion)}`,
-    `Deterministic scoring and routing are reconstructed from the compact record. Narrative source: ${sanitize(record.narrativeSource)}.`,
-    "derived",
-  );
-  drawBullet(
-    methodology,
-    "Record boundary",
-    "The record excludes raw answers, question-level evidence, full narrative, detailed capacity activities, and contact consent history beyond retained status fields.",
-  );
-  drawBullet(
-    methodology,
-    "Professional boundary",
-    "This assessment is not an audit and does not validate root causes, implementation effort, savings, revenue, valuation, legal compliance, tax treatment, or financial outcomes.",
-  );
-  const route = ROUTES[record.leadRoute] ?? ROUTES.nurture;
-  drawRule(methodology, 20);
-  drawSectionLabel(methodology, "Recommended next step");
-  drawWrapped(methodology, route.label, {
-    font: fonts.displayBold,
-    size: 18,
-    color: COLORS.forest,
-    lineHeight: 23,
-    gapAfter: 8,
-  });
-  drawWrapped(methodology, route.reason, {
-    size: 10.5,
-    color: COLORS.muted,
-    lineHeight: 15,
-    gapAfter: 8,
-  });
-  drawWrapped(methodology, `Route: ${route.path}`, {
+  label(capacity, "Bounded operating estimate");
+  title(capacity, "Recoverable capacity");
+  drawAt(capacity, `Impact confidence: ${record.impactConfidence}`, {
     font: fonts.bodyBold,
     size: 10,
+    gapAfter: 10,
     color: COLORS.bronze,
-    gapAfter: 0,
   });
+  const grossRows = [
+    ["Owner gross hours", record.ownerGrossHours],
+    ["Reporting gross hours", record.reportingGrossHours],
+    ["Rework gross hours", record.reworkGrossHours],
+  ] as const;
+  for (const [heading, value] of grossRows) {
+    drawAt(capacity, `${heading}: ${integer.format(value)} | SOURCE: ${capacityInputLabel(record.capacityInputSource)}`, {
+      font: fonts.bodyBold,
+      size: 9,
+      gapAfter: 5,
+    });
+  }
+  if (record.estimateType !== "unavailable" && !estimateIsComplete(record)) {
+    label(capacity, "Inconsistent retained estimate");
+    drawAt(
+      capacity,
+      "A non-unavailable estimate is missing one or more required range or realization fields. No financial range is rendered.",
+      { font: fonts.display, size: 14, lineHeight: 18, gapAfter: 10 },
+    );
+  } else if (record.estimateType === "unavailable") {
+    label(capacity, "Nonfinancial supported indicators");
+    drawAt(
+      capacity,
+      "The retained category hours above are visible without assigning a recoverable-hours or monetary value.",
+      { size: 9, lineHeight: 12, gapAfter: 8 },
+    );
+    label(capacity, "Inputs needed");
+    drawAt(
+      capacity,
+      "Complete time, frequency, people, and cost inputs across at least two eligible categories are needed for a supported range.",
+      { size: 9, lineHeight: 12, gapAfter: 8 },
+    );
+  } else {
+    drawAt(
+      capacity,
+      `Recoverable hours: ${integer.format(record.recoverableHoursLow)} - ${integer.format(record.recoverableHoursHigh)}`,
+      { font: fonts.displayBold, size: 19, lineHeight: 23, gapAfter: 3, color: COLORS.forest },
+    );
+    drawAt(
+      capacity,
+      `Annual capacity value: ${currency.format(record.annualValueLow)} - ${currency.format(record.annualValueHigh)}`,
+      { font: fonts.displayBold, size: 17, lineHeight: 21, gapAfter: 5, color: COLORS.forest },
+    );
+    drawAt(
+      capacity,
+      `Realization range: ${integer.format(record.realizationFactorLow * 100)} - ${integer.format(record.realizationFactorHigh * 100)} percent`,
+      { font: fonts.bodyBold, size: 9, gapAfter: 2 },
+    );
+    drawAt(capacity, `SOURCE: ${capacitySource(record).toUpperCase()}`, {
+      font: fonts.bodyBold,
+      size: 7,
+      gapAfter: 8,
+      color: COLORS.bronze,
+    });
+  }
+  label(capacity, "Assumptions");
+  const assumptions = parseArray<string>(record.capacityAssumptionCodesJson);
+  drawAt(
+    capacity,
+    assumptions.length
+      ? assumptions.map((code) => ASSUMPTIONS[code] ?? "Unrecognized controlled assumption code.").join(" ")
+      : "No controlled capacity assumptions were retained.",
+    { size: 7.8, lineHeight: 10, gapAfter: 7, color: COLORS.muted },
+  );
+  label(capacity, "Exclusions");
+  const exclusions = parseArray<string>(record.capacityExclusionCodesJson);
+  drawAt(
+    capacity,
+    exclusions.length
+      ? exclusions.map((code) => EXCLUSIONS[code] ?? "Unrecognized controlled exclusion code.").join(" ")
+      : "No controlled exclusions were recorded.",
+    { size: 7.8, lineHeight: 10, color: COLORS.muted },
+  );
+
+  const supported = addPage(pdf, fonts, 5, "Supported findings");
+  label(supported, "Controlled evidence and implications");
+  title(supported, "Supported findings");
+  if (findings.length) {
+    for (const finding of findings) {
+      const definition = finding.component
+        ? COMPONENTS[finding.component]
+        : null;
+      bullet(
+        supported,
+        findingLabel(finding),
+        `Evidence summary: ${evidenceSummary(finding)} Implication: ${
+          definition?.implication ??
+          "Missing evidence reduces the confidence available for operating interpretation."
+        } Causes require validation: the aggregate result does not establish root cause.`,
+        "derived from controlled evidence code",
+        8,
+      );
+    }
+  } else {
+    bullet(
+      supported,
+      "No supported findings retained",
+      "Evidence summary: no controlled finding code is available. Implication: interpretation is limited. Causes require validation.",
+    );
+  }
+  sourceKey(supported);
+
+  const direction = addPage(pdf, fonts, 6, "90-day direction");
+  label(direction, "Controlled action sequence");
+  title(direction, "90-day priority direction");
+  const ordered = priorities.length
+    ? priorities
+    : (Object.keys(PRIORITIES) as ComponentId[]);
+  ordered.slice(0, 3).forEach((componentId, index) => {
+    const priority = PRIORITIES[componentId];
+    bullet(
+      direction,
+      `${index + 1}. ${priority.title}`,
+      `${priority.action} Leading indicator: ${priority.indicator}.`,
+      "derived priority order",
+      9,
+    );
+  });
+  label(direction, "Paid diagnostic boundary");
+  drawAt(
+    direction,
+    "The 90-day direction is educational and does not include root-cause validation, implementation design, quantified business-case validation, or execution support. Those activities require a separately agreed paid diagnostic or advisory engagement.",
+    { size: 9, lineHeight: 12, color: COLORS.muted },
+  );
+
+  const methodology = addPage(pdf, fonts, 7, "Methodology and confidence");
+  label(methodology, "Boundary, sources, and routing");
+  title(methodology, "Methodology and confidence");
+  bullet(
+    methodology,
+    `Methodology ${record.assessmentVersion}`,
+    `Deterministic scoring, controlled evidence reconstruction, and routing use compact retained fields. Score confidence: ${record.scoreConfidence}. Impact confidence: ${record.impactConfidence}. Coverage: ${integer.format(record.scoreCoverage * 100)} percent.`,
+    "derived",
+    8,
+  );
+  label(methodology, "Estimate source key");
+  drawAt(
+    methodology,
+    "Exact input = entered values. Banded input = selected self-reported range midpoint. Derived = deterministic scoring or routing. Realization-adjusted = modeled range applied to retained capacity inputs.",
+    { size: 8, lineHeight: 11, gapAfter: 7 },
+  );
+  label(methodology, "Limitations");
+  drawAt(
+    methodology,
+    "Raw answers and free-text narratives are not retained. Controlled question and option labels reconstruct only approved evidence summaries. Findings are directional and causes require validation.",
+    { size: 8, lineHeight: 11, gapAfter: 7, color: COLORS.muted },
+  );
+  label(methodology, "Professional boundary");
+  drawAt(
+    methodology,
+    "This assessment is not an audit and does not validate root causes, implementation effort, savings, revenue, valuation, legal compliance, tax treatment, or financial outcomes.",
+    { size: 8, lineHeight: 11, gapAfter: 7, color: COLORS.muted },
+  );
+  label(methodology, "Routed next step");
+  drawAt(
+    methodology,
+    `${route.label}. ${route.reason} Route: ${route.path}`,
+    { font: fonts.bodyBold, size: 9, lineHeight: 12, gapAfter: 7, color: COLORS.forest },
+  );
+  label(methodology, "Eddie contact");
+  drawAt(
+    methodology,
+    "Edward (Eddie) Abiodun | Business Independence Advisory | /contact",
+    { font: fonts.bodyBold, size: 9, gapAfter: 0 },
+  );
 
   return pdf.save({ useObjectStreams: false });
 }

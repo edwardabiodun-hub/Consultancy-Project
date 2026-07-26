@@ -11,6 +11,9 @@ export type AssessmentRisk = {
   kind: "risk" | "watchpoint" | "strength";
   label: string;
   evidence: string;
+  component: ComponentId | null;
+  evidenceQuestionId: string | null;
+  evidenceValue: number | "unknown" | null;
 };
 
 export type AssessmentCta = {
@@ -88,7 +91,11 @@ const CTA_BY_ROUTE: Record<LeadRoute, AssessmentCta> = {
 const evidencePredicateForComponent = (
   component: ComponentId,
   answers: AssessmentAnswers,
-): { value: number | "unknown"; evidence: string } | null => {
+): {
+  value: number | "unknown";
+  evidence: string;
+  evidenceQuestionId: string;
+} | null => {
   const applicable = QUESTION_BANK.filter(
     (candidate) =>
       candidate.component === component &&
@@ -114,6 +121,7 @@ const evidencePredicateForComponent = (
   const option = question.options.find((candidate) => candidate.value === value);
   return {
     value: value as number | "unknown",
+    evidenceQuestionId: question.id,
     evidence: `Self-reported response: ${question.prompt} ${
       option?.label ?? String(value)
     }.`,
@@ -138,6 +146,9 @@ const buildRisks = (
       evidence:
         score.confidence.reasons[0] ??
         "One or more self-reported responses could not be verified.",
+      component: null,
+      evidenceQuestionId: null,
+      evidenceValue: "unknown",
     });
   }
 
@@ -163,6 +174,9 @@ const buildRisks = (
       kind,
       label: definition.label,
       evidence: predicate.evidence,
+      component,
+      evidenceQuestionId: predicate.evidenceQuestionId,
+      evidenceValue: predicate.value,
     });
   }
 

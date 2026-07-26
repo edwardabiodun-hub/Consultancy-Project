@@ -7,10 +7,14 @@ const CLASSIFICATION_ASSUMPTION = "Each activity is assigned to exactly one cate
 export type CapacityResult = {
   confidence: "high" | "medium" | "low";
   estimateType: "calculated" | "directional" | "unavailable";
+  inputSource: CapacityInputs["source"];
   grossHours: Record<Category | "total", number>;
+  realizationFactors: { low: number; high: number } | null;
   recoverableHours: { low: number; high: number } | null;
   annualValue: { low: number; high: number } | null;
   assumptions: string[];
+  assumptionCodes: string[];
+  exclusionCodes: string[];
 };
 
 const isValidNonNegativeNumber = (value: unknown): value is number =>
@@ -34,13 +38,22 @@ const isCompleteActivity = (activity: unknown): activity is CapacityActivity => 
 
 const emptyGrossHours = (): CapacityResult["grossHours"] => ({ owner: 0, reporting: 0, rework: 0, total: 0 });
 
-const unavailable = (grossHours: CapacityResult["grossHours"], assumptions: string[]): CapacityResult => ({
+const unavailable = (
+  inputSource: CapacityInputs["source"],
+  grossHours: CapacityResult["grossHours"],
+  assumptions: string[],
+  exclusionCodes: string[],
+): CapacityResult => ({
   confidence: "low",
   estimateType: "unavailable",
+  inputSource,
   grossHours,
+  realizationFactors: null,
   recoverableHours: null,
   annualValue: null,
   assumptions,
+  assumptionCodes: ["exclusive_category_assignment"],
+  exclusionCodes,
 });
 
 const activityLabel = (activity: unknown, index: number): string => {
@@ -56,10 +69,10 @@ export function calculateCapacity(input: CapacityInputs): CapacityResult {
     .filter((activityId): activityId is string => typeof activityId === "string" && activityId.trim().length > 0);
   const duplicateIds = [...new Set(activityIds.filter((activityId, index) => activityIds.indexOf(activityId) !== index))];
   if (duplicateIds.length) {
-    return unavailable(emptyGrossHours(), [
+    return unavailable(input.source, emptyGrossHours(), [
       `Duplicate activity ID${duplicateIds.length === 1 ? "" : "s"} rejected: ${duplicateIds.join(", ")}.`,
       CLASSIFICATION_ASSUMPTION,
-    ]);
+    ], ["duplicate_activity_id"]);
   }
 
   const validActivities = activities.filter(isCompleteActivity);
@@ -79,10 +92,15 @@ export function calculateCapacity(input: CapacityInputs): CapacityResult {
 
   const populatedCategories = CATEGORIES.filter((category) => validActivities.some((activity) => activity.category === category));
   if (populatedCategories.length < 2 || input.source === "none") {
-    return unavailable(grossHours, [
+    return unavailable(input.source, grossHours, [
       "At least two complete eligible capacity categories are required.",
       ...exclusions,
       CLASSIFICATION_ASSUMPTION,
+    ], [
+      input.source === "none"
+        ? "no_capacity_inputs"
+        : "insufficient_eligible_categories",
+      ...(exclusions.length ? ["invalid_activity_excluded"] : []),
     ]);
   }
 
@@ -90,7 +108,9 @@ export function calculateCapacity(input: CapacityInputs): CapacityResult {
   return {
     confidence: input.source === "exact" ? "high" : "medium",
     estimateType: input.source === "exact" ? "calculated" : "directional",
+    inputSource: input.source,
     grossHours,
+    realizationFactors: { low: factors[0], high: factors[1] },
     recoverableHours: {
       low: Math.round(grossHours.total * factors[0]),
       high: Math.round(grossHours.total * factors[1]),
@@ -103,5 +123,11 @@ export function calculateCapacity(input: CapacityInputs): CapacityResult {
       `Applied a ${factors[0] * 100}% to ${factors[1] * 100}% realization range.`,
       CLASSIFICATION_ASSUMPTION,
     ],
+    assumptionCodes: [
+      "exclusive_category_assignment",
+      input.source === "exact" ? "exact_inputs" : "banded_midpoints",
+      input.source === "exact" ? "realization_50_70" : "realization_35_55",
+    ],
+    exclusionCodes: exclusions.length ? ["invalid_activity_excluded"] : [],
   };
 }

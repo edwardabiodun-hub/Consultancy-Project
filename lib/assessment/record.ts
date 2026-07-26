@@ -40,10 +40,31 @@ export function toAssessmentRecord({
     scoreConfidence: result.score.confidence.level,
     impactConfidence: result.capacity.confidence,
     estimateType: result.capacity.estimateType,
+    capacityInputSource: result.capacity.inputSource,
+    ownerGrossHours: result.capacity.grossHours?.owner ?? 0,
+    reportingGrossHours: result.capacity.grossHours?.reporting ?? 0,
+    reworkGrossHours: result.capacity.grossHours?.rework ?? 0,
+    realizationFactorLow: result.capacity.realizationFactors?.low ?? null,
+    realizationFactorHigh: result.capacity.realizationFactors?.high ?? null,
     recoverableHoursLow: result.capacity.recoverableHours?.low ?? null,
     recoverableHoursHigh: result.capacity.recoverableHours?.high ?? null,
     annualValueLow: result.capacity.annualValue?.low ?? null,
     annualValueHigh: result.capacity.annualValue?.high ?? null,
+    findingsJson: JSON.stringify(
+      (result.risks ?? []).slice(0, 3).map((finding) => ({
+        code: finding.code,
+        kind: finding.kind,
+        component: finding.component,
+        evidenceQuestionId: finding.evidenceQuestionId,
+        evidenceValue: finding.evidenceValue,
+      })),
+    ),
+    capacityAssumptionCodesJson: JSON.stringify(
+      result.capacity.assumptionCodes ?? [],
+    ),
+    capacityExclusionCodesJson: JSON.stringify(
+      result.capacity.exclusionCodes ?? [],
+    ),
     riskCodesJson: JSON.stringify(
       result.interpretation.riskCodes.slice(0, 3),
     ),

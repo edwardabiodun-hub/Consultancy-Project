@@ -21,8 +21,17 @@ const result = {
   capacity: {
     confidence: "medium",
     estimateType: "directional",
+    inputSource: "banded",
+    grossHours: { owner: 80, reporting: 140, rework: 20, total: 240 },
+    realizationFactors: { low: 0.35, high: 0.55 },
     recoverableHours: { low: 120, high: 180 },
     annualValue: { low: 12_000, high: 18_000 },
+    assumptionCodes: [
+      "exclusive_category_assignment",
+      "banded_midpoints",
+      "realization_35_55",
+    ],
+    exclusionCodes: ["invalid_activity_excluded"],
   },
   interpretation: {
     riskCodes: [
@@ -37,6 +46,26 @@ const result = {
     ],
     route: "diagnostic",
   },
+  risks: [
+    {
+      code: "owner_bottleneck",
+      kind: "risk",
+      label: "Owner decision concentration",
+      evidence: "controlled",
+      component: "ownerIndependence",
+      evidenceQuestionId: "criticalDecisions",
+      evidenceValue: 25,
+    },
+    {
+      code: "operating_system_gap",
+      kind: "watchpoint",
+      label: "Operating-system inconsistency",
+      evidence: "controlled",
+      component: "operatingSystem",
+      evidenceQuestionId: "workflowDocumentation",
+      evidenceValue: 50,
+    },
+  ],
   narrative: { source: "rules" },
 };
 
@@ -93,10 +122,40 @@ test("compact record excludes detailed answers and selects reproducible fields",
     scoreConfidence: "high",
     impactConfidence: "medium",
     estimateType: "directional",
+    capacityInputSource: "banded",
+    ownerGrossHours: 80,
+    reportingGrossHours: 140,
+    reworkGrossHours: 20,
+    realizationFactorLow: 0.35,
+    realizationFactorHigh: 0.55,
     recoverableHoursLow: 120,
     recoverableHoursHigh: 180,
     annualValueLow: 12_000,
     annualValueHigh: 18_000,
+    findingsJson: JSON.stringify([
+      {
+        code: "owner_bottleneck",
+        kind: "risk",
+        component: "ownerIndependence",
+        evidenceQuestionId: "criticalDecisions",
+        evidenceValue: 25,
+      },
+      {
+        code: "operating_system_gap",
+        kind: "watchpoint",
+        component: "operatingSystem",
+        evidenceQuestionId: "workflowDocumentation",
+        evidenceValue: 50,
+      },
+    ]),
+    capacityAssumptionCodesJson: JSON.stringify([
+      "exclusive_category_assignment",
+      "banded_midpoints",
+      "realization_35_55",
+    ]),
+    capacityExclusionCodesJson: JSON.stringify([
+      "invalid_activity_excluded",
+    ]),
     riskCodesJson: JSON.stringify([
       "owner_bottleneck",
       "operating_system_gap",
@@ -125,8 +184,13 @@ test("compact record uses null contacts and no-delivery status without a lead", 
       capacity: {
         confidence: "low",
         estimateType: "unavailable",
+        inputSource: "none",
+        grossHours: { owner: 0, reporting: 0, rework: 0, total: 0 },
+        realizationFactors: null,
         recoverableHours: null,
         annualValue: null,
+        assumptionCodes: ["exclusive_category_assignment"],
+        exclusionCodes: ["no_capacity_inputs"],
       },
     },
   });
@@ -138,6 +202,9 @@ test("compact record uses null contacts and no-delivery status without a lead", 
   assert.equal(record.ownerIndependenceScore, null);
   assert.equal(record.recoverableHoursLow, null);
   assert.equal(record.annualValueHigh, null);
+  assert.equal(record.capacityInputSource, "none");
+  assert.equal(record.ownerGrossHours, 0);
+  assert.equal(record.realizationFactorLow, null);
   assert.equal(record.reportDeliveryStatus, "not_requested");
 });
 

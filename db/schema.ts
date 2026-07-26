@@ -28,10 +28,23 @@ export const assessmentRecords = sqliteTable("assessment_records", {
   scoreConfidence: text("score_confidence").notNull(),
   impactConfidence: text("impact_confidence").notNull(),
   estimateType: text("estimate_type").notNull(),
+  capacityInputSource: text("capacity_input_source").notNull().default("none"),
+  ownerGrossHours: real("owner_gross_hours").notNull().default(0),
+  reportingGrossHours: real("reporting_gross_hours").notNull().default(0),
+  reworkGrossHours: real("rework_gross_hours").notNull().default(0),
+  realizationFactorLow: real("realization_factor_low"),
+  realizationFactorHigh: real("realization_factor_high"),
   recoverableHoursLow: real("recoverable_hours_low"),
   recoverableHoursHigh: real("recoverable_hours_high"),
   annualValueLow: real("annual_value_low"),
   annualValueHigh: real("annual_value_high"),
+  findingsJson: text("findings_json").notNull().default("[]"),
+  capacityAssumptionCodesJson: text("capacity_assumption_codes_json")
+    .notNull()
+    .default("[]"),
+  capacityExclusionCodesJson: text("capacity_exclusion_codes_json")
+    .notNull()
+    .default("[]"),
   riskCodesJson: text("risk_codes_json").notNull(),
   priorityIdsJson: text("priority_ids_json").notNull(),
   leadRoute: text("lead_route").notNull(),
