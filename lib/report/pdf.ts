@@ -27,6 +27,7 @@ export type AssessmentReportRecord = {
   ownerGrossHours: number;
   reportingGrossHours: number;
   reworkGrossHours: number;
+  grossCapacityValue: number | null;
   realizationFactorLow: number | null;
   realizationFactorHigh: number | null;
   recoverableHoursLow: number | null;
@@ -553,6 +554,7 @@ export function deriveCapacityPresentation(
     "No controlled exclusions were recorded.",
   );
   const rangeValues = [
+    record.grossCapacityValue,
     record.realizationFactorLow,
     record.realizationFactorHigh,
     record.recoverableHoursLow,
@@ -628,7 +630,12 @@ export function deriveCapacityPresentation(
     record.recoverableHoursLow ===
       Math.round(grossTotal * expectedFactors.low) &&
     record.recoverableHoursHigh ===
-      Math.round(grossTotal * expectedFactors.high);
+      Math.round(grossTotal * expectedFactors.high) &&
+    record.grossCapacityValue !== null &&
+    record.annualValueLow ===
+      Math.round(record.grossCapacityValue * expectedFactors.low) &&
+    record.annualValueHigh ===
+      Math.round(record.grossCapacityValue * expectedFactors.high);
 
   if (expected && grossHours && rangesAreOrdered && hasCanonicalCapacityMath) {
     return {

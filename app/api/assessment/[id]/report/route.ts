@@ -42,6 +42,7 @@ const findAssessmentRecord = async (
       ownerGrossHours: assessmentRecords.ownerGrossHours,
       reportingGrossHours: assessmentRecords.reportingGrossHours,
       reworkGrossHours: assessmentRecords.reworkGrossHours,
+      grossCapacityValue: assessmentRecords.grossCapacityValue,
       realizationFactorLow: assessmentRecords.realizationFactorLow,
       realizationFactorHigh: assessmentRecords.realizationFactorHigh,
       recoverableHoursLow: assessmentRecords.recoverableHoursLow,

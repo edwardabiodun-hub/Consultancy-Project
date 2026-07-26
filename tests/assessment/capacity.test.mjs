@@ -24,6 +24,7 @@ test("exact inputs for two exclusive activities produce high-confidence calculat
   assert.equal(result.confidence, "high");
   assert.equal(result.estimateType, "calculated");
   assert.deepEqual(result.grossHours, { owner: 48, reporting: 72, rework: 0, total: 120 });
+  assert.equal(result.grossCapacityValue, 8400);
   assert.deepEqual(result.recoverableHours, { low: 60, high: 84 });
   assert.deepEqual(result.annualValue, { low: 4200, high: 5880 });
   assert.ok(result.assumptions.some((assumption) => /exactly one category/i.test(assumption)));
@@ -32,6 +33,7 @@ test("exact inputs for two exclusive activities produce high-confidence calculat
 test("one eligible activity does not produce a financial estimate", () => {
   const result = calculateCapacity({ source: "exact", activities: [owner] });
   assert.equal(result.confidence, "low");
+  assert.equal(result.grossCapacityValue, null);
   assert.equal(result.annualValue, null);
 });
 
@@ -45,6 +47,7 @@ test("banded activities use the directional 35 to 55 percent realization range",
   });
   assert.equal(result.confidence, "medium");
   assert.equal(result.estimateType, "directional");
+  assert.equal(result.grossCapacityValue, 20_000);
   assert.deepEqual(result.recoverableHours, { low: 70, high: 110 });
   assert.deepEqual(result.annualValue, { low: 7000, high: 11000 });
 });

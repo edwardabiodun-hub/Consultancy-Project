@@ -3,7 +3,10 @@ import { inflateSync } from "node:zlib";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 import { calculateCapacity } from "../../lib/assessment/capacity.ts";
-import { buildAssessmentPdf } from "../../lib/report/pdf.ts";
+import {
+  buildAssessmentPdf,
+  deriveCapacityPresentation,
+} from "../../lib/report/pdf.ts";
 import {
   createAssessmentReportHandler,
 } from "../../app/api/assessment/[id]/report/route.ts";
@@ -27,6 +30,7 @@ const baseRecord = {
   ownerGrossHours: 80,
   reportingGrossHours: 140,
   reworkGrossHours: 20,
+  grossCapacityValue: 24_000,
   realizationFactorLow: 0.5,
   realizationFactorHigh: 0.7,
   recoverableHoursLow: 120,
@@ -120,6 +124,7 @@ const withCapacityResult = (record, capacity) => ({
   ownerGrossHours: capacity.grossHours.owner,
   reportingGrossHours: capacity.grossHours.reporting,
   reworkGrossHours: capacity.grossHours.rework,
+  grossCapacityValue: capacity.grossCapacityValue,
   realizationFactorLow: capacity.realizationFactors?.low ?? null,
   realizationFactorHigh: capacity.realizationFactors?.high ?? null,
   recoverableHoursLow: capacity.recoverableHours?.low ?? null,
@@ -217,6 +222,8 @@ test("capacity page distinguishes banded, unavailable, and inconsistent records"
     realizationFactorHigh: 0.55,
     recoverableHoursLow: 84,
     recoverableHoursHigh: 132,
+    annualValueLow: 8_400,
+    annualValueHigh: 13_200,
     capacityAssumptionCodesJson: JSON.stringify([
       "banded_midpoints",
       "realization_35_55",
@@ -231,6 +238,7 @@ test("capacity page distinguishes banded, unavailable, and inconsistent records"
     capacityInputSource: "none",
     realizationFactorLow: null,
     realizationFactorHigh: null,
+    grossCapacityValue: null,
     recoverableHoursLow: null,
     recoverableHoursHigh: null,
     annualValueLow: null,
@@ -332,6 +340,65 @@ test("available capacity tuples require canonical factors and recoverable arithm
     const pdf = await inspectPdf({ ...baseRecord, ...changes });
     assert.match(pdf.pages[1], /Inconsistent retained estimate/i);
     assert.match(pdf.pages[3], /Inconsistent retained estimate/i);
+    assert.match(pdf.pages[6], /Capacity presentation: inconsistent/i);
+  }
+});
+
+test("coherent exact, banded, and rounded annual values remain available", () => {
+  const fixtures = [
+    baseRecord,
+    {
+      ...baseRecord,
+      impactConfidence: "medium",
+      estimateType: "directional",
+      capacityInputSource: "banded",
+      realizationFactorLow: 0.35,
+      realizationFactorHigh: 0.55,
+      recoverableHoursLow: 84,
+      recoverableHoursHigh: 132,
+      annualValueLow: 8_400,
+      annualValueHigh: 13_200,
+    },
+    {
+      ...baseRecord,
+      grossCapacityValue: 101,
+      annualValueLow: 51,
+      annualValueHigh: 71,
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    assert.equal(deriveCapacityPresentation(fixture).status, "available");
+  }
+});
+
+test("annual values that do not round from the retained gross value suppress money on pages two, four, and seven", async () => {
+  const fixtures = [
+    { annualValueLow: 11_999 },
+    { annualValueHigh: 16_801 },
+    {
+      impactConfidence: "medium",
+      estimateType: "directional",
+      capacityInputSource: "banded",
+      realizationFactorLow: 0.35,
+      realizationFactorHigh: 0.55,
+      recoverableHoursLow: 84,
+      recoverableHoursHigh: 132,
+      annualValueLow: 12_000,
+      annualValueHigh: 16_800,
+    },
+  ];
+
+  for (const changes of fixtures) {
+    const pdf = await inspectPdf({ ...baseRecord, ...changes });
+    for (const pageIndex of [1, 3]) {
+      assert.match(pdf.pages[pageIndex], /Inconsistent retained estimate/i);
+      assert.doesNotMatch(pdf.pages[pageIndex], /\$/);
+      assert.doesNotMatch(
+        pdf.pages[pageIndex],
+        /\d[\d,]*\s*-\s*\d[\d,]*\s+recoverable hours/i,
+      );
+    }
     assert.match(pdf.pages[6], /Capacity presentation: inconsistent/i);
   }
 });

@@ -32,6 +32,7 @@ export const assessmentRecords = sqliteTable("assessment_records", {
   ownerGrossHours: real("owner_gross_hours").notNull().default(0),
   reportingGrossHours: real("reporting_gross_hours").notNull().default(0),
   reworkGrossHours: real("rework_gross_hours").notNull().default(0),
+  grossCapacityValue: real("gross_capacity_value"),
   realizationFactorLow: real("realization_factor_low"),
   realizationFactorHigh: real("realization_factor_high"),
   recoverableHoursLow: real("recoverable_hours_low"),

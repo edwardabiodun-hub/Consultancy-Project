@@ -9,6 +9,7 @@ export type CapacityResult = {
   estimateType: "calculated" | "directional" | "unavailable";
   inputSource: CapacityInputs["source"];
   grossHours: Record<Category | "total", number>;
+  grossCapacityValue: number | null;
   realizationFactors: { low: number; high: number } | null;
   recoverableHours: { low: number; high: number } | null;
   annualValue: { low: number; high: number } | null;
@@ -48,6 +49,7 @@ const unavailable = (
   estimateType: "unavailable",
   inputSource,
   grossHours,
+  grossCapacityValue: null,
   realizationFactors: null,
   recoverableHours: null,
   annualValue: null,
@@ -110,6 +112,7 @@ export function calculateCapacity(input: CapacityInputs): CapacityResult {
     estimateType: input.source === "exact" ? "calculated" : "directional",
     inputSource: input.source,
     grossHours,
+    grossCapacityValue: grossValue,
     realizationFactors: { low: factors[0], high: factors[1] },
     recoverableHours: {
       low: Math.round(grossHours.total * factors[0]),

@@ -15,6 +15,13 @@
       "when": 1785072938918,
       "tag": "0002_kind_whiplash",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785075398817,
+      "tag": "0003_nosy_puppet_master",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,7 @@ export function toAssessmentRecord({
     ownerGrossHours: result.capacity.grossHours?.owner ?? 0,
     reportingGrossHours: result.capacity.grossHours?.reporting ?? 0,
     reworkGrossHours: result.capacity.grossHours?.rework ?? 0,
+    grossCapacityValue: result.capacity.grossCapacityValue,
     realizationFactorLow: result.capacity.realizationFactors?.low ?? null,
     realizationFactorHigh: result.capacity.realizationFactors?.high ?? null,
     recoverableHoursLow: result.capacity.recoverableHours?.low ?? null,

@@ -23,9 +23,10 @@ const result = {
     estimateType: "directional",
     inputSource: "banded",
     grossHours: { owner: 80, reporting: 140, rework: 20, total: 240 },
+    grossCapacityValue: 24_000,
     realizationFactors: { low: 0.35, high: 0.55 },
-    recoverableHours: { low: 120, high: 180 },
-    annualValue: { low: 12_000, high: 18_000 },
+    recoverableHours: { low: 84, high: 132 },
+    annualValue: { low: 8_400, high: 13_200 },
     assumptionCodes: [
       "exclusive_category_assignment",
       "banded_midpoints",
@@ -126,12 +127,13 @@ test("compact record excludes detailed answers and selects reproducible fields",
     ownerGrossHours: 80,
     reportingGrossHours: 140,
     reworkGrossHours: 20,
+    grossCapacityValue: 24_000,
     realizationFactorLow: 0.35,
     realizationFactorHigh: 0.55,
-    recoverableHoursLow: 120,
-    recoverableHoursHigh: 180,
-    annualValueLow: 12_000,
-    annualValueHigh: 18_000,
+    recoverableHoursLow: 84,
+    recoverableHoursHigh: 132,
+    annualValueLow: 8_400,
+    annualValueHigh: 13_200,
     findingsJson: JSON.stringify([
       {
         code: "owner_bottleneck",
@@ -186,6 +188,7 @@ test("compact record uses null contacts and no-delivery status without a lead", 
         estimateType: "unavailable",
         inputSource: "none",
         grossHours: { owner: 0, reporting: 0, rework: 0, total: 0 },
+        grossCapacityValue: null,
         realizationFactors: null,
         recoverableHours: null,
         annualValue: null,
@@ -204,6 +207,7 @@ test("compact record uses null contacts and no-delivery status without a lead", 
   assert.equal(record.annualValueHigh, null);
   assert.equal(record.capacityInputSource, "none");
   assert.equal(record.ownerGrossHours, 0);
+  assert.equal(record.grossCapacityValue, null);
   assert.equal(record.realizationFactorLow, null);
   assert.equal(record.reportDeliveryStatus, "not_requested");
 });
