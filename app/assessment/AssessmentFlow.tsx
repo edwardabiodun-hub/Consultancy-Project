@@ -744,6 +744,26 @@ export function AssessmentFlow() {
               <div className="assessment-kicker">
                 {COMPONENTS.find((component) => component.id === screen)?.label}
               </div>
+              {/* Visually hidden: the fieldset legend below already presents
+                  this question's prompt to sighted users in its designed
+                  place. This heading exists so each question is a distinct,
+                  navigable landmark for screen-reader users, matching every
+                  other screen in this flow (which all have a visible h1). */}
+              <h1
+                style={{
+                  position: "absolute",
+                  width: 1,
+                  height: 1,
+                  padding: 0,
+                  margin: -1,
+                  overflow: "hidden",
+                  clip: "rect(0, 0, 0, 0)",
+                  whiteSpace: "nowrap",
+                  border: 0,
+                }}
+              >
+                {currentQuestion.prompt}
+              </h1>
               <p className="assessment-section-note">
                 {COMPONENTS.find((component) => component.id === screen)?.description}
               </p>

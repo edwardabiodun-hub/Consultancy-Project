@@ -12,6 +12,7 @@
     "test:domain": "node --import=tsx --test tests/assessment/*.test.mjs",
     "test:component": "node --import=tsx --test tests/component/*.test.mjs",
     "test": "npm run test:domain && npm run test:component && npm run build && node --test tests/rendered-html.test.mjs",
+    "test:e2e": "playwright test",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "4.2.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
