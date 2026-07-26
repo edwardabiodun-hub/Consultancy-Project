@@ -112,3 +112,52 @@ The executable suite covers:
 
 - This task recomputes and returns the result but does not implement durable report storage or email delivery. The UI therefore describes those capabilities as unavailable when the API request fails and makes no false delivery claim.
 - Full-project standalone TypeScript checking has the pre-existing errors listed above; the required lint, test, and production build gates pass.
+
+## Round 1 Trust-Boundary Fix
+
+### Findings addressed
+
+- Added a shared pure `capacity-contract.ts` used by both capacity UI producers and server validation.
+- Canonicalized source, activity ID, and category tuples:
+  - `banded-owner-v1`, `banded-reporting-v1`, and `banded-rework-v1` are accepted only for their matching category under `source: "banded"`.
+  - `precision-owner-v1`, `precision-reporting-v1`, and `precision-rework-v1` are accepted only for their matching category under `source: "exact"`.
+- Banded numeric payloads must exactly match one of the disclosed midpoint presets in the shared contract.
+- Exact inputs retain finite inclusive bounds.
+- Replaced the validation error accumulator with a null-prototype map so raw own `__proto__` is retained as a rejected field and safely serialized.
+- Aligned existing valid session/component/API fixtures to canonical IDs.
+- Validation responses include field paths and controlled messages only; success and failure responses do not reflect submitted lead PII.
+
+### TDD red evidence
+
+`node --test tests\rendered-html.test.mjs`
+
+- 5 canonical-capacity exploit cases failed because invented, source-crossed, category-crossed, and modified-banded activities returned `200` instead of `422`.
+- The raw top-level own `__proto__` exploit failed because it returned `200` instead of `422`.
+- Existing unaffected endpoint cases remained green.
+
+### Focused green evidence
+
+`node --test tests\rendered-html.test.mjs`
+
+- 50 tests passed, 0 failed.
+- Coverage includes canonical valid exact/banded controls, invented/source-cross/category-cross IDs, modified bands, duplicate IDs/categories, unknown fields at every input level, wrong collection/object shapes, non-finite values, inclusive minima/maxima, raw own `__proto__`, and PII non-reflection.
+
+### Final round verification
+
+`npm.cmd run lint`
+
+- Exit `0`; no ESLint errors.
+
+`npm.cmd test`
+
+- Exit `0`.
+- Domain: 52 tests passed.
+- Component: 23 tests passed.
+- Rendered/API: 50 tests passed.
+- Total: 125 tests passed, 0 failed.
+- Production build completed with `/api/assessment/calculate`.
+
+`npm.cmd exec -- tsc --noEmit`
+
+- No Task 6 type errors remain.
+- The command remains non-zero only for the previously documented `PrecisionInputs.tsx` union-narrowing error and missing Cloudflare ambient types.

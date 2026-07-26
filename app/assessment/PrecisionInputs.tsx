@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PRECISION_ACTIVITY_IDS } from "../../lib/assessment/capacity-contract";
 import type {
   CapacityActivity,
   CapacityCategory,
@@ -60,12 +61,6 @@ export const createEmptyPrecisionDrafts = (): PrecisionDrafts => ({
   rework: { ...EMPTY_DRAFT },
 });
 
-const IDS: Record<CapacityCategory, string> = {
-  owner: "precision-owner-v1",
-  reporting: "precision-reporting-v1",
-  rework: "precision-rework-v1",
-};
-
 const isBlank = (draft: ActivityDraft, category: CapacityCategory) =>
   fieldsFor(category).every((field) => draft[field] === "");
 
@@ -101,7 +96,7 @@ const toActivity = (
   category: CapacityCategory,
 ): CapacityActivity => {
   const base = {
-    activityId: IDS[category],
+    activityId: PRECISION_ACTIVITY_IDS[category],
     category,
     hoursPerOccurrence: Number(draft.hoursPerOccurrence),
     occurrencesPerYear: Number(draft.occurrencesPerYear),

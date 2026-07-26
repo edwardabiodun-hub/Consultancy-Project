@@ -1,4 +1,10 @@
 import { QUESTION_BANK } from "./questions";
+import {
+  CAPACITY_CATEGORY_ORDER,
+  CAPACITY_LIMITS,
+  expectedActivityId,
+  isKnownBandedActivity,
+} from "./capacity-contract";
 import type {
   AnswerValue,
   AssessmentAnswers,
@@ -6,12 +12,7 @@ import type {
   CapacityCategory,
 } from "./types";
 
-export const LIMITS = {
-  people: { min: 1, max: 10000 },
-  hoursPerOccurrence: { min: 0, max: 168 },
-  occurrencesPerYear: { min: 0, max: 365 },
-  hourlyCost: { min: 0, max: 10000 },
-} as const;
+export { CAPACITY_LIMITS as LIMITS } from "./capacity-contract";
 
 export type AssessmentLead = {
   name: string;
@@ -64,7 +65,7 @@ const ROLES = [
 const CORE_SYSTEM_COUNTS = ["one", "twoOrMore"] as const;
 const ORGANIZATION_SHAPES = ["singleTeam", "multipleTeams"] as const;
 const CAPACITY_SOURCES = ["none", "banded", "exact"] as const;
-const CAPACITY_CATEGORIES = ["owner", "reporting", "rework"] as const;
+const CAPACITY_CATEGORIES = CAPACITY_CATEGORY_ORDER;
 const SCORE_VALUES: AnswerValue[] = [
   0,
   25,
@@ -209,6 +210,9 @@ const parseCapacity = (
     `${path}.source`,
     errors,
   );
+  const source = sourceValid
+    ? (value.source as AssessmentAnswers["capacity"]["source"])
+    : null;
   if (!Array.isArray(value.activities)) {
     errors[`${path}.activities`] = "Enter a valid activity list.";
     return null;
@@ -237,8 +241,8 @@ const parseCapacity = (
       activity.activityId.length <= 100
         ? activity.activityId
         : null;
-    const activityIdValid = activityId !== null;
-    if (!activityIdValid) {
+    let activityIdValid = activityId !== null;
+    if (activityId === null) {
       errors[`${activityPath}.activityId`] =
         "Enter an activity ID from 1 to 100 characters.";
     } else if (activityIds.has(activityId)) {
@@ -256,6 +260,17 @@ const parseCapacity = (
     const category = categoryValid
       ? (activity.category as CapacityCategory)
       : null;
+    if (
+      activityId &&
+      category &&
+      source &&
+      source !== "none" &&
+      activityId !== expectedActivityId(source, category)
+    ) {
+      errors[`${activityPath}.activityId`] =
+        "Activity ID must match its source and category.";
+      activityIdValid = false;
+    }
     if (category) {
       if (categories.has(category)) {
         errors[`${activityPath}.category`] =
@@ -267,19 +282,19 @@ const parseCapacity = (
 
     const hoursValid = validateBoundedNumber(
       activity.hoursPerOccurrence,
-      LIMITS.hoursPerOccurrence,
+      CAPACITY_LIMITS.hoursPerOccurrence,
       `${activityPath}.hoursPerOccurrence`,
       errors,
     );
     const occurrencesValid = validateBoundedNumber(
       activity.occurrencesPerYear,
-      LIMITS.occurrencesPerYear,
+      CAPACITY_LIMITS.occurrencesPerYear,
       `${activityPath}.occurrencesPerYear`,
       errors,
     );
     const costValid = validateBoundedNumber(
       activity.hourlyCost,
-      LIMITS.hourlyCost,
+      CAPACITY_LIMITS.hourlyCost,
       `${activityPath}.hourlyCost`,
       errors,
     );
@@ -297,7 +312,7 @@ const parseCapacity = (
     ) {
       peopleValid = validateBoundedNumber(
         activity.people,
-        LIMITS.people,
+        CAPACITY_LIMITS.people,
         `${activityPath}.people`,
         errors,
         true,
@@ -320,7 +335,7 @@ const parseCapacity = (
         occurrencesPerYear: activity.occurrencesPerYear as number,
         hourlyCost: activity.hourlyCost as number,
       };
-      activities.push(
+      const candidate: CapacityActivity =
         category === "owner"
           ? {
               ...base,
@@ -331,8 +346,13 @@ const parseCapacity = (
               ...base,
               category,
               people: activity.people as number,
-            },
-      );
+            };
+      if (source === "banded" && !isKnownBandedActivity(candidate)) {
+        errors[activityPath] =
+          "Banded activity values must match a disclosed capacity range.";
+      } else {
+        activities.push(candidate);
+      }
     }
   });
 
@@ -347,9 +367,9 @@ const parseCapacity = (
     }
   }
 
-  return sourceValid
+  return source
     ? {
-        source: value.source as AssessmentAnswers["capacity"]["source"],
+        source,
         activities,
       }
     : null;
@@ -422,12 +442,10 @@ const parseLead = (
 export function parseAssessmentPayload(
   input: unknown,
 ): AssessmentPayloadParseResult {
-  const errors: Record<string, string> = {};
+  const errors = Object.create(null) as Record<string, string>;
   if (!isPlainObject(input)) {
-    return {
-      ok: false,
-      errors: { form: "Enter a valid JSON assessment payload." },
-    };
+    errors.form = "Enter a valid JSON assessment payload.";
+    return { ok: false, errors };
   }
 
   for (const key of Object.keys(input)) {

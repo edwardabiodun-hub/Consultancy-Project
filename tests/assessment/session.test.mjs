@@ -23,14 +23,14 @@ const validAnswers = {
     source: "exact",
     activities: [
       {
-        activityId: "owner-approvals",
+        activityId: "precision-owner-v1",
         category: "owner",
         hoursPerOccurrence: 2,
         occurrencesPerYear: 12,
         hourlyCost: 100,
       },
       {
-        activityId: "monthly-reporting",
+        activityId: "precision-reporting-v1",
         category: "reporting",
         people: 2,
         hoursPerOccurrence: 3,

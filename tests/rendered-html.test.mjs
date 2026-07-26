@@ -281,7 +281,7 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
     {
       label: "people above limit",
       activities: [{
-        activityId: "reporting-a",
+        activityId: "precision-reporting-v1",
         category: "reporting",
         people: 10001,
         hoursPerOccurrence: 1,
@@ -293,7 +293,7 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
     {
       label: "hours above limit",
       activities: [{
-        activityId: "owner-a",
+        activityId: "precision-owner-v1",
         category: "owner",
         hoursPerOccurrence: 169,
         occurrencesPerYear: 1,
@@ -304,7 +304,7 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
     {
       label: "occurrences above limit",
       activities: [{
-        activityId: "owner-a",
+        activityId: "precision-owner-v1",
         category: "owner",
         hoursPerOccurrence: 1,
         occurrencesPerYear: 366,
@@ -315,7 +315,7 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
     {
       label: "cost above limit",
       activities: [{
-        activityId: "owner-a",
+        activityId: "precision-owner-v1",
         category: "owner",
         hoursPerOccurrence: 1,
         occurrencesPerYear: 1,
@@ -326,7 +326,7 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
     {
       label: "negative value",
       activities: [{
-        activityId: "owner-a",
+        activityId: "precision-owner-v1",
         category: "owner",
         hoursPerOccurrence: -1,
         occurrencesPerYear: 1,
@@ -338,14 +338,14 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
       label: "duplicate category",
       activities: [
         {
-          activityId: "owner-a",
+          activityId: "precision-owner-v1",
           category: "owner",
           hoursPerOccurrence: 1,
           occurrencesPerYear: 1,
           hourlyCost: 1,
         },
         {
-          activityId: "owner-b",
+          activityId: "precision-owner-v1",
           category: "owner",
           hoursPerOccurrence: 2,
           occurrencesPerYear: 2,
@@ -372,6 +372,415 @@ test("assessment calculation rejects adversarial capacity values and duplicate c
       assert.equal(response.status, 422);
       const body = await response.json();
       assert.ok(body.errors[fixture.field]);
+    });
+  }
+});
+
+test("assessment calculation rejects non-canonical capacity identities and modified bands", async (t) => {
+  const baseOwner = {
+    activityId: "precision-owner-v1",
+    category: "owner",
+    hoursPerOccurrence: 1,
+    occurrencesPerYear: 1,
+    hourlyCost: 1,
+  };
+  const fixtures = [
+    {
+      label: "invented exact ID",
+      source: "exact",
+      activity: { ...baseOwner, activityId: "invented-owner" },
+    },
+    {
+      label: "banded ID used for exact source",
+      source: "exact",
+      activity: { ...baseOwner, activityId: "banded-owner-v1" },
+    },
+    {
+      label: "precision ID used for banded source",
+      source: "banded",
+      activity: { ...baseOwner },
+    },
+    {
+      label: "owner ID crossed to reporting category",
+      source: "exact",
+      activity: {
+        ...baseOwner,
+        category: "reporting",
+        people: 1,
+      },
+    },
+    {
+      label: "modified banded midpoint",
+      source: "banded",
+      activity: {
+        activityId: "banded-owner-v1",
+        category: "owner",
+        hoursPerOccurrence: 1.6,
+        occurrencesPerYear: 52,
+        hourlyCost: 100,
+      },
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          validAssessmentPayload({
+            answers: {
+              capacity: {
+                source: fixture.source,
+                activities: [fixture.activity],
+              },
+            },
+          }),
+        ),
+      });
+      assert.equal(response.status, 422);
+      const body = await response.json();
+      assert.equal(body.ok, false);
+      assert.ok(
+        body.errors["answers.capacity.activities.0.activityId"] ||
+          body.errors["answers.capacity.activities.0"],
+      );
+    });
+  }
+});
+
+test("assessment calculation accepts canonical exact and banded capacity contracts", async (t) => {
+  const fixtures = [
+    {
+      label: "exact inclusive maximums",
+      source: "exact",
+      activities: [
+        {
+          activityId: "precision-owner-v1",
+          category: "owner",
+          hoursPerOccurrence: 168,
+          occurrencesPerYear: 365,
+          hourlyCost: 10000,
+        },
+        {
+          activityId: "precision-reporting-v1",
+          category: "reporting",
+          people: 10000,
+          hoursPerOccurrence: 0,
+          occurrencesPerYear: 0,
+          hourlyCost: 0,
+        },
+      ],
+      estimateType: "calculated",
+    },
+    {
+      label: "banded disclosed presets",
+      source: "banded",
+      activities: [
+        {
+          activityId: "banded-owner-v1",
+          category: "owner",
+          hoursPerOccurrence: 1.5,
+          occurrencesPerYear: 52,
+          hourlyCost: 100,
+        },
+        {
+          activityId: "banded-reporting-v1",
+          category: "reporting",
+          people: 3,
+          hoursPerOccurrence: 3,
+          occurrencesPerYear: 12,
+          hourlyCost: 50,
+        },
+      ],
+      estimateType: "directional",
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          validAssessmentPayload({
+            answers: {
+              capacity: {
+                source: fixture.source,
+                activities: fixture.activities,
+              },
+            },
+          }),
+        ),
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.ok, true);
+      assert.equal(body.result.capacity.estimateType, fixture.estimateType);
+    });
+  }
+});
+
+test("assessment calculation rejects duplicate activity IDs", async () => {
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      validAssessmentPayload({
+        answers: {
+          capacity: {
+            source: "exact",
+            activities: [
+              {
+                activityId: "precision-owner-v1",
+                category: "owner",
+                hoursPerOccurrence: 1,
+                occurrencesPerYear: 1,
+                hourlyCost: 1,
+              },
+              {
+                activityId: "precision-owner-v1",
+                category: "reporting",
+                people: 1,
+                hoursPerOccurrence: 1,
+                occurrencesPerYear: 1,
+                hourlyCost: 1,
+              },
+            ],
+          },
+        },
+      }),
+    ),
+  });
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.ok(body.errors["answers.capacity.activities.1.activityId"]);
+});
+
+test("assessment calculation rejects raw own __proto__ without reflecting PII", async () => {
+  const validJson = JSON.stringify(
+    validAssessmentPayload({
+      lead: {
+        name: "Private Person",
+        workEmail: "private.person@example.com",
+        company: "Private Company",
+        phone: "+1 843 555 0199",
+      },
+    }),
+  );
+  const tamperedJson = validJson.replace(
+    "{",
+    '{"__proto__":{"polluted":true},',
+  );
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: tamperedJson,
+  });
+  assert.equal(response.status, 422);
+  const rawBody = await response.text();
+  assert.doesNotMatch(
+    rawBody,
+    /Private Person|private\.person@example\.com|Private Company|843 555 0199/,
+  );
+  const body = JSON.parse(rawBody);
+  assert.equal(body.ok, false);
+  assert.equal(Object.hasOwn(body.errors, "__proto__"), true);
+});
+
+test("assessment calculation rejects unknown keys at every raw input level", async (t) => {
+  const fixtures = [
+    {
+      label: "top level",
+      payload: validAssessmentPayload({ unexpected: true }),
+      field: "unexpected",
+    },
+    {
+      label: "lead",
+      payload: validAssessmentPayload({ lead: { unexpected: true } }),
+      field: "lead.unexpected",
+    },
+    {
+      label: "capacity",
+      payload: validAssessmentPayload({
+        answers: {
+          capacity: {
+            source: "none",
+            activities: [],
+            unexpected: true,
+          },
+        },
+      }),
+      field: "answers.capacity.unexpected",
+    },
+    {
+      label: "activity",
+      payload: validAssessmentPayload({
+        answers: {
+          capacity: {
+            source: "exact",
+            activities: [
+              {
+                activityId: "precision-owner-v1",
+                category: "owner",
+                hoursPerOccurrence: 1,
+                occurrencesPerYear: 1,
+                hourlyCost: 1,
+                unexpected: true,
+              },
+            ],
+          },
+        },
+      }),
+      field: "answers.capacity.activities.0.unexpected",
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(fixture.payload),
+      });
+      assert.equal(response.status, 422);
+      const body = await response.json();
+      assert.ok(body.errors[fixture.field]);
+    });
+  }
+});
+
+test("assessment calculation rejects wrong collection and object shapes", async (t) => {
+  const fixtures = [
+    { label: "top-level array", payload: [] },
+    {
+      label: "answers array",
+      payload: { ...validAssessmentPayload(), answers: [] },
+    },
+    {
+      label: "scored array",
+      payload: validAssessmentPayload({ answers: { scored: [] } }),
+    },
+    {
+      label: "capacity array",
+      payload: validAssessmentPayload({ answers: { capacity: [] } }),
+    },
+    {
+      label: "activities object",
+      payload: validAssessmentPayload({
+        answers: { capacity: { source: "exact", activities: {} } },
+      }),
+    },
+    {
+      label: "activity array",
+      payload: validAssessmentPayload({
+        answers: { capacity: { source: "exact", activities: [[]] } },
+      }),
+    },
+    {
+      label: "lead array",
+      payload: { ...validAssessmentPayload(), lead: [] },
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(fixture.payload),
+      });
+      assert.equal(response.status, 422);
+      assert.equal((await response.json()).ok, false);
+    });
+  }
+});
+
+test("assessment calculation enforces finite values and inclusive minimums", async (t) => {
+  const minimumResponse = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      validAssessmentPayload({
+        answers: {
+          capacity: {
+            source: "exact",
+            activities: [
+              {
+                activityId: "precision-reporting-v1",
+                category: "reporting",
+                people: 1,
+                hoursPerOccurrence: 0,
+                occurrencesPerYear: 0,
+                hourlyCost: 0,
+              },
+            ],
+          },
+        },
+      }),
+    ),
+  });
+  assert.equal(minimumResponse.status, 200);
+
+  const finiteJson = JSON.stringify(
+    validAssessmentPayload({
+      answers: {
+        capacity: {
+          source: "exact",
+          activities: [
+            {
+              activityId: "precision-owner-v1",
+              category: "owner",
+              hoursPerOccurrence: 1,
+              occurrencesPerYear: 1,
+              hourlyCost: 1,
+            },
+          ],
+        },
+      },
+    }),
+  ).replace('"hoursPerOccurrence":1', '"hoursPerOccurrence":1e309');
+  await t.test("non-finite parsed number", async () => {
+    const response = await request("/api/assessment/calculate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: finiteJson,
+    });
+    assert.equal(response.status, 422);
+    const body = await response.json();
+    assert.ok(
+      body.errors["answers.capacity.activities.0.hoursPerOccurrence"],
+    );
+  });
+});
+
+test("assessment responses never reflect submitted lead PII", async (t) => {
+  const pii = {
+    name: "Private Person",
+    workEmail: "private.person@example.com",
+    company: "Private Company",
+    phone: "+1 843 555 0199",
+  };
+  for (const fixture of [
+    { label: "success", lead: pii, expectedStatus: 200 },
+    {
+      label: "validation error",
+      lead: { ...pii, reportConsent: false },
+      expectedStatus: 422,
+    },
+  ]) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(validAssessmentPayload({ lead: fixture.lead })),
+      });
+      assert.equal(response.status, fixture.expectedStatus);
+      const rawBody = await response.text();
+      assert.doesNotMatch(
+        rawBody,
+        /Private Person|private\.person@example\.com|Private Company|843 555 0199/,
+      );
     });
   }
 });
