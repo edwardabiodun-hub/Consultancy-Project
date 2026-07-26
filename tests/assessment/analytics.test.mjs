@@ -115,6 +115,71 @@ test("parseAssessmentEventPayload rejects a non-string optional field", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Closed value sets for screen / resultCategory / scoreConfidence /
+// impactConfidence / route - each field is checked against its own specific
+// finite union, not any of the five sets generically.
+// ---------------------------------------------------------------------------
+
+const ENUM_FIELD_CASES = {
+  screen: {
+    valid: [
+      "landing",
+      "context",
+      "ownerIndependence",
+      "operatingSystem",
+      "informationVisibility",
+      "preliminary",
+      "contact",
+      "precision",
+      "processing",
+      "full",
+    ],
+    invalid: "strong",
+  },
+  resultCategory: {
+    valid: ["strong", "emerging", "developing", "highDependency", "incomplete"],
+    invalid: "full",
+  },
+  scoreConfidence: {
+    valid: ["high", "medium", "low", "incomplete"],
+    invalid: "diagnostic",
+  },
+  impactConfidence: {
+    valid: ["high", "medium", "low"],
+    invalid: "incomplete",
+  },
+  route: {
+    valid: ["diagnostic", "nurture", "insights", "restricted"],
+    invalid: "high",
+  },
+};
+
+for (const [field, { valid, invalid }] of Object.entries(ENUM_FIELD_CASES)) {
+  for (const value of valid) {
+    test(`parseAssessmentEventPayload accepts "${value}" for ${field}`, () => {
+      const result = parseAssessmentEventPayload({
+        eventName: "assessment_started",
+        [field]: value,
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.event[field], value);
+    });
+  }
+
+  test(`parseAssessmentEventPayload rejects an out-of-set value for ${field}`, () => {
+    const result = parseAssessmentEventPayload({
+      eventName: "assessment_started",
+      [field]: invalid,
+    });
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.errors[field],
+      `expected a field-specific error on errors.${field}, got: ${JSON.stringify(result.errors)}`,
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/assessment/events
 // ---------------------------------------------------------------------------
 

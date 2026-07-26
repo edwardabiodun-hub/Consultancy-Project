@@ -42,6 +42,48 @@ const OPTIONAL_EVENT_FIELDS = [
 
 type OptionalEventField = (typeof OPTIONAL_EVENT_FIELDS)[number];
 
+// Closed value sets for the fields above that are themselves finite unions
+// elsewhere in the codebase (funnel screen, deterministic result category,
+// and the two confidence levels/lead route already shown on screen).
+// `assessmentId` is a generated identifier, not a finite set, so it is only
+// length/shape-checked below, not enum-checked here. Kept local to this
+// module (rather than importing lib/assessment/validation.ts's isOneOf) so
+// analytics stays decoupled from the answer-validation module, per this
+// file's header comment.
+const SCREEN_VALUES = [
+  "landing",
+  "context",
+  "ownerIndependence",
+  "operatingSystem",
+  "informationVisibility",
+  "preliminary",
+  "contact",
+  "precision",
+  "processing",
+  "full",
+] as const;
+const RESULT_CATEGORY_VALUES = [
+  "strong",
+  "emerging",
+  "developing",
+  "highDependency",
+  "incomplete",
+] as const;
+const SCORE_CONFIDENCE_VALUES = ["high", "medium", "low", "incomplete"] as const;
+const IMPACT_CONFIDENCE_VALUES = ["high", "medium", "low"] as const;
+const ROUTE_VALUES = ["diagnostic", "nurture", "insights", "restricted"] as const;
+
+const ENUM_FIELDS: Partial<Record<OptionalEventField, readonly string[]>> = {
+  screen: SCREEN_VALUES,
+  resultCategory: RESULT_CATEGORY_VALUES,
+  scoreConfidence: SCORE_CONFIDENCE_VALUES,
+  impactConfidence: IMPACT_CONFIDENCE_VALUES,
+  route: ROUTE_VALUES,
+};
+
+const isOneOf = (value: string, allowed: readonly string[]): boolean =>
+  allowed.includes(value);
+
 export type AssessmentEventInput = {
   eventName: AssessmentEventName;
 } & Partial<Record<OptionalEventField, string>>;
@@ -97,6 +139,11 @@ export function parseAssessmentEventPayload(
       value.length > MAX_FIELD_LENGTH
     ) {
       errors[field] = `Enter a valid value from 1 to ${MAX_FIELD_LENGTH} characters.`;
+      continue;
+    }
+    const allowedValues = ENUM_FIELDS[field];
+    if (allowedValues && !isOneOf(value, allowedValues)) {
+      errors[field] = "Select a supported value.";
       continue;
     }
     event[field] = value;
