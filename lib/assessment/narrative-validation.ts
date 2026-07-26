@@ -21,13 +21,6 @@ const KNOWN_COMPONENTS: ReadonlySet<ComponentId> = new Set([
   "informationVisibility",
 ]);
 
-const KNOWN_RISK_CODES = new Set([
-  "measurement_gap",
-  "owner_bottleneck",
-  "operating_system_gap",
-  "information_bottleneck",
-]);
-
 const BENCHMARK_PHRASES = [
   /industry average/i,
   /top quartile/i,
@@ -202,8 +195,16 @@ export function validateNarrative(draft: NarrativeDraft, result: AssessmentResul
   const allowed = allowedNumbers(result);
   if (numbers.some((value) => !allowed.has(value))) return false;
 
+  // The only risk codes this draft may reference are the ones actually sent
+  // to the model for this specific result (`buildNarrativeModelInput` puts
+  // `result.risks.map(risk => risk.code)` on the wire). A fixed global list
+  // would either reject legitimate codes the model was given (most scored
+  // components resolve to a watchpoint/strength code, not one of a small
+  // static set) or allow codes from a different result than the one being
+  // validated - so the allow-list is built fresh from `result.risks` per call.
+  const providedRiskCodes = new Set(result.risks.map((risk) => risk.code));
   const codes = extractSnakeCaseCodes(text);
-  if (codes.some((code) => !KNOWN_RISK_CODES.has(code))) return false;
+  if (codes.some((code) => !providedRiskCodes.has(code))) return false;
 
   if (BENCHMARK_PHRASES.some((phrase) => phrase.test(text))) return false;
   if (GUARANTEE_PHRASES.some((phrase) => phrase.test(text))) return false;

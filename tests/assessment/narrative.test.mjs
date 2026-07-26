@@ -114,7 +114,16 @@ test("validateNarrative rejects a financial number absent from the deterministic
   assert.equal(validateNarrative(draft, result), false);
 });
 
-test("validateNarrative rejects an invented risk code", () => {
+test("validateNarrative rejects an invented risk code that was never sent to the model", () => {
+  // Sanity check: `result` (all scored answers = 50) only ever produces
+  // owner_independence_watchpoint / operating_system_watchpoint /
+  // information_visibility_watchpoint codes (see the fixture-derived test
+  // below), so "cashflow_crisis_signal" is not present in result.risks either
+  // before or after the fix - it should always be rejected.
+  assert.equal(
+    result.risks.some((risk) => risk.code === "cashflow_crisis_signal"),
+    false,
+  );
   const draft = {
     ...validDraft(),
     componentObservations: [
@@ -122,6 +131,53 @@ test("validateNarrative rejects an invented risk code", () => {
       {
         component: "ownerIndependence",
         observation: "This is flagged under risk code cashflow_crisis_signal.",
+      },
+    ],
+  };
+  assert.equal(validateNarrative(draft, result), false);
+});
+
+test("validateNarrative accepts a watchpoint/strength risk code that was actually provided to the model", () => {
+  // `buildNarrativeModelInput` sends `result.risks.map(risk => risk.code)` to
+  // the model, and for this fixture (all scored answers = 50) every finding
+  // resolves to a watchpoint code - none of which are risk codes, yet they
+  // are still legitimate, model-provided vocabulary the draft must be
+  // allowed to reference.
+  const watchpointCode = result.risks.find((risk) => risk.kind === "watchpoint")?.code;
+  assert.equal(watchpointCode, "owner_independence_watchpoint");
+
+  const draft = {
+    ...validDraft(),
+    componentObservations: [
+      ...validDraft().componentObservations.slice(1),
+      {
+        component: "ownerIndependence",
+        observation: `This is flagged under the provided finding code ${watchpointCode}.`,
+      },
+    ],
+  };
+  assert.equal(validateNarrative(draft, result), true);
+});
+
+test("validateNarrative rejects a risk code that is valid vocabulary in general but absent from this result's risks", () => {
+  // "operating_system_watchpoint" is a real code the model can be given for
+  // other results, but it is not among this fixture's `result.risks` (which
+  // resolves to owner_independence_watchpoint / operating_system_watchpoint
+  // / information_visibility_watchpoint - so pick one deliberately excluded
+  // from what was sent for a *different* assessment to prove the allow-list
+  // is scoped per call, not global).
+  const otherAssessmentOnlyCode = "owner_independence_strength";
+  assert.equal(
+    result.risks.some((risk) => risk.code === otherAssessmentOnlyCode),
+    false,
+  );
+  const draft = {
+    ...validDraft(),
+    componentObservations: [
+      ...validDraft().componentObservations.slice(1),
+      {
+        component: "ownerIndependence",
+        observation: `This is flagged under the finding code ${otherAssessmentOnlyCode}.`,
       },
     ],
   };
