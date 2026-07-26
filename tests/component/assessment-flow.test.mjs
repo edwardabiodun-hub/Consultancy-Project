@@ -406,6 +406,16 @@ test("Back from contact and precision retains contact and assessment state", asy
   );
   await user.click(screen.getByRole("button", { name: "Continue to full assessment" }));
   assert.ok(screen.getByRole("button", { name: "Use my earlier ranges" }));
+  const ownerPrecision = screen.getByRole("group", { name: "Owner intervention" });
+  const reportingPrecision = screen.getByRole("group", {
+    name: "Team reporting and reconciliation",
+  });
+  const ownerPrecisionFields = within(ownerPrecision).getAllByRole("spinbutton");
+  const reportingPrecisionFields = within(reportingPrecision).getAllByRole("spinbutton");
+  await user.type(ownerPrecisionFields[0], "2.5");
+  await user.type(ownerPrecisionFields[1], "12");
+  await user.type(reportingPrecisionFields[0], "3");
+  await user.type(reportingPrecisionFields[1], "4.5");
   await user.click(screen.getByRole("button", { name: "Back" }));
 
   assert.equal(screen.getByRole("textbox", { name: "Name" }).value, "Eddie Example");
@@ -420,6 +430,17 @@ test("Back from contact and precision retains contact and assessment state", asy
     }).checked,
     true,
   );
+  await user.click(screen.getByRole("button", { name: "Continue to full assessment" }));
+  const retainedOwner = within(
+    screen.getByRole("group", { name: "Owner intervention" }),
+  ).getAllByRole("spinbutton");
+  const retainedReporting = within(
+    screen.getByRole("group", { name: "Team reporting and reconciliation" }),
+  ).getAllByRole("spinbutton");
+  assert.equal(retainedOwner[0].value, "2.5");
+  assert.equal(retainedOwner[1].value, "12");
+  assert.equal(retainedReporting[0].value, "3");
+  assert.equal(retainedReporting[1].value, "4.5");
 });
 
 test("strong integrated results present strengths and an insights route", async () => {

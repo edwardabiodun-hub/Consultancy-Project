@@ -15,7 +15,11 @@ import { ContactGate } from "./ContactGate";
 import type { LeadDraft } from "./ContactGate";
 import { BandedCapacityInputs } from "./BandedCapacityInputs";
 import { FullResult } from "./FullResult";
-import { PrecisionInputs } from "./PrecisionInputs";
+import {
+  createEmptyPrecisionDrafts,
+  PrecisionInputs,
+} from "./PrecisionInputs";
+import type { PrecisionDrafts } from "./PrecisionInputs";
 import { PreliminaryResult } from "./PreliminaryResult";
 
 type Screen =
@@ -214,6 +218,9 @@ export function AssessmentFlow() {
     reportConsent: false,
     marketingConsent: false,
   });
+  const [precisionDrafts, setPrecisionDrafts] = useState<PrecisionDrafts>(
+    createEmptyPrecisionDrafts,
+  );
   const stepRef = useRef<HTMLElement>(null);
   const previousStep = useRef<{ screen: Screen; questionIndex: number } | null>(null);
 
@@ -629,6 +636,8 @@ export function AssessmentFlow() {
               answers.capacity.source === "banded" &&
               result.capacity.estimateType === "directional"
             }
+            value={precisionDrafts}
+            onChange={setPrecisionDrafts}
             onComplete={continueWithCapacity}
           />
         )}

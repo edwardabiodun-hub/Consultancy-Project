@@ -75,6 +75,65 @@ test("strong results contain only supported strengths and no deficit codes", () 
   );
 });
 
+test("finding kind follows the same lowest known response shown as evidence", () => {
+  for (const [value, expectedKind] of [
+    [44, "risk"],
+    [45, "watchpoint"],
+    [79, "watchpoint"],
+    [80, "strength"],
+  ]) {
+    const scored = Object.fromEntries(
+      QUESTION_BANK.map((question) => [
+        question.id,
+        question.id === "criticalDecisions" ? value : 100,
+      ]),
+    );
+    const result = buildAssessmentResult({ ...answers, scored });
+    const ownerFinding = result.risks.find((finding) =>
+      finding.code.startsWith("owner_"),
+    );
+
+    assert.equal(ownerFinding?.kind, expectedKind, `boundary ${value}`);
+    assert.match(ownerFinding?.evidence ?? "", new RegExp(String(value)));
+  }
+});
+
+test("a contradictory low owner response prevents an owner strength", () => {
+  const scored = Object.fromEntries(
+    QUESTION_BANK.map((question) => [
+      question.id,
+      question.id === "workWaiting" ? 0 : 100,
+    ]),
+  );
+  const result = buildAssessmentResult({ ...answers, scored });
+  const ownerFinding = result.risks.find((finding) =>
+    finding.code.startsWith("owner_"),
+  );
+
+  assert.equal(ownerFinding?.kind, "risk");
+  assert.match(ownerFinding?.evidence ?? "", /work wait/i);
+  assert.doesNotMatch(
+    result.risks.map((finding) => finding.code).join(" "),
+    /owner_independence_strength/,
+  );
+});
+
+test("an unknown owner response cannot produce an owner strength", () => {
+  const scored = Object.fromEntries(
+    QUESTION_BANK.map((question) => [
+      question.id,
+      question.id === "workWaiting" ? "unknown" : 100,
+    ]),
+  );
+  const result = buildAssessmentResult({ ...answers, scored });
+
+  assert.ok(result.risks.some((finding) => finding.code === "measurement_gap"));
+  assert.doesNotMatch(
+    result.risks.map((finding) => finding.code).join(" "),
+    /owner_independence_strength/,
+  );
+});
+
 test("emerging results contain supported watchpoints rather than manufactured deficits", () => {
   const result = buildAssessmentResult(answersAt(75));
 

@@ -13,14 +13,18 @@ type PrecisionInputsProps = {
   onSkip: () => void;
   hasEarlierRanges: boolean;
   onComplete: (capacity: CapacityInputs) => void;
+  value?: PrecisionDrafts;
+  onChange?: (drafts: PrecisionDrafts) => void;
 };
 
-type ActivityDraft = {
+export type ActivityDraft = {
   hoursPerOccurrence: string;
   people: string;
   occurrencesPerYear: string;
   hourlyCost: string;
 };
+
+export type PrecisionDrafts = Record<CapacityCategory, ActivityDraft>;
 
 type ActivityField = keyof ActivityDraft;
 
@@ -49,6 +53,12 @@ const EMPTY_DRAFT: ActivityDraft = {
   occurrencesPerYear: "",
   hourlyCost: "",
 };
+
+export const createEmptyPrecisionDrafts = (): PrecisionDrafts => ({
+  owner: { ...EMPTY_DRAFT },
+  reporting: { ...EMPTY_DRAFT },
+  rework: { ...EMPTY_DRAFT },
+});
 
 const IDS: Record<CapacityCategory, string> = {
   owner: "precision-owner-v1",
@@ -143,6 +153,7 @@ function ActivityFields({
   onChange,
   validation,
   showValidation,
+  blankFormError = false,
   children,
 }: {
   category: CapacityCategory;
@@ -151,13 +162,19 @@ function ActivityFields({
   onChange: (draft: ActivityDraft) => void;
   validation: ReturnType<typeof validationFor>;
   showValidation: boolean;
+  blankFormError?: boolean;
   children?: React.ReactNode;
 }) {
   const prefix = `precision-${category}`;
   const invalidFields = [...validation.missing, ...validation.invalid];
   const errorId = `${prefix}-error`;
   const invalid = (field: ActivityField) =>
-    showValidation && invalidFields.includes(field);
+    (showValidation && invalidFields.includes(field)) ||
+    (blankFormError && category === "owner" && field === "hoursPerOccurrence");
+  const describedBy = (field: ActivityField) =>
+    blankFormError && category === "owner" && field === "hoursPerOccurrence"
+      ? "precision-form-error"
+      : errorId;
   const missingLabels = validation.missing.map(
     (field) => FIELD_LABELS[field].toLowerCase(),
   );
@@ -173,7 +190,7 @@ function ActivityFields({
             value={draft.people}
             integer
             invalid={invalid("people")}
-            describedBy={errorId}
+            describedBy={describedBy("people")}
             onChange={(people) => onChange({ ...draft, people })}
           />
         )}
@@ -182,7 +199,7 @@ function ActivityFields({
           label="Hours per occurrence"
           value={draft.hoursPerOccurrence}
           invalid={invalid("hoursPerOccurrence")}
-          describedBy={errorId}
+          describedBy={describedBy("hoursPerOccurrence")}
           onChange={(hoursPerOccurrence) => onChange({ ...draft, hoursPerOccurrence })}
         />
         <NumericField
@@ -190,7 +207,7 @@ function ActivityFields({
           label="Occurrences per year"
           value={draft.occurrencesPerYear}
           invalid={invalid("occurrencesPerYear")}
-          describedBy={errorId}
+          describedBy={describedBy("occurrencesPerYear")}
           onChange={(occurrencesPerYear) => onChange({ ...draft, occurrencesPerYear })}
         />
         <NumericField
@@ -198,7 +215,7 @@ function ActivityFields({
           label="Hourly cost"
           value={draft.hourlyCost}
           invalid={invalid("hourlyCost")}
-          describedBy={errorId}
+          describedBy={describedBy("hourlyCost")}
           onChange={(hourlyCost) => onChange({ ...draft, hourlyCost })}
         />
       </div>
@@ -222,12 +239,13 @@ export function PrecisionInputs({
   onSkip,
   hasEarlierRanges,
   onComplete,
+  value,
+  onChange,
 }: PrecisionInputsProps) {
-  const [drafts, setDrafts] = useState<Record<CapacityCategory, ActivityDraft>>({
-    owner: { ...EMPTY_DRAFT },
-    reporting: { ...EMPTY_DRAFT },
-    rework: { ...EMPTY_DRAFT },
-  });
+  const [internalDrafts, setInternalDrafts] = useState<PrecisionDrafts>(
+    createEmptyPrecisionDrafts,
+  );
+  const drafts = value ?? internalDrafts;
   const [attempted, setAttempted] = useState(false);
   const categories = Object.keys(drafts) as CapacityCategory[];
   const validations = Object.fromEntries(
@@ -244,9 +262,13 @@ export function PrecisionInputs({
       validations[category].missing.length > 0 ||
       validations[category].invalid.length > 0,
   );
+  const blankFormError =
+    attempted && completeCategories.length === 0 && invalidCategories.length === 0;
 
   const update = (category: CapacityCategory, draft: ActivityDraft) => {
-    setDrafts((current) => ({ ...current, [category]: draft }));
+    const next = { ...drafts, [category]: draft };
+    setInternalDrafts(next);
+    onChange?.(next);
   };
 
   return (
@@ -294,6 +316,11 @@ export function PrecisionInputs({
           });
         }}
       >
+        {blankFormError && (
+          <p className="assessment-validation" id="precision-form-error" role="alert">
+            At least one complete category is required to calculate with exact inputs.
+          </p>
+        )}
         <ActivityFields
           category="owner"
           title="Owner intervention"
@@ -301,6 +328,7 @@ export function PrecisionInputs({
           onChange={(draft) => update("owner", draft)}
           validation={validations.owner}
           showValidation={attempted}
+          blankFormError={blankFormError}
         />
         <ActivityFields
           category="reporting"

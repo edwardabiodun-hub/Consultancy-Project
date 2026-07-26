@@ -274,6 +274,48 @@ test("precision copy is truthful when no earlier banded range exists", async () 
   assert.equal(skipped, true);
 });
 
+test("blank exact calculation exposes an accessible form error that clears after completion", async () => {
+  const user = userEvent.setup();
+  let submitted = null;
+  render(
+    React.createElement(PrecisionInputs, {
+      onBack: () => {},
+      onUseEarlierRanges: () => {},
+      onSkip: () => {},
+      hasEarlierRanges: false,
+      onComplete: (capacity) => {
+        submitted = capacity;
+      },
+    }),
+  );
+
+  await user.click(screen.getByRole("button", { name: "Calculate with exact inputs" }));
+  const summary = screen.getByRole("alert");
+  const owner = screen.getByRole("group", { name: "Owner intervention" });
+  const ownerHours = within(owner).getByRole("spinbutton", {
+    name: "Hours per occurrence",
+  });
+  assert.match(summary.textContent, /at least one complete category is required/i);
+  assert.equal(document.activeElement, ownerHours);
+  assert.equal(ownerHours.getAttribute("aria-invalid"), "true");
+  assert.equal(ownerHours.getAttribute("aria-describedby"), "precision-form-error");
+
+  const ownerFields = within(owner).getAllByRole("spinbutton");
+  for (const [field, value] of ownerFields.map((field, index) => [
+    field,
+    ["2", "12", "100"][index],
+  ])) {
+    await user.type(field, value);
+  }
+
+  assert.equal(screen.queryByText(/at least one complete category is required/i), null);
+  assert.equal(ownerHours.getAttribute("aria-invalid"), "false");
+  assert.equal(ownerHours.getAttribute("aria-describedby"), null);
+  await user.click(screen.getByRole("button", { name: "Calculate with exact inputs" }));
+  assert.equal(submitted.activities.length, 1);
+  assert.equal(submitted.activities[0].activityId, "precision-owner-v1");
+});
+
 test("banded choices create stable exclusive activities from disclosed self-reported midpoints", async () => {
   const user = userEvent.setup();
   let capacity = null;

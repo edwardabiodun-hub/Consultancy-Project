@@ -85,29 +85,39 @@ const CTA_BY_ROUTE: Record<LeadRoute, AssessmentCta> = {
   },
 };
 
-const evidenceForComponent = (
+const evidencePredicateForComponent = (
   component: ComponentId,
   answers: AssessmentAnswers,
-): string => {
-  const question = QUESTION_BANK
-    .filter(
-      (candidate) =>
-        candidate.component === component &&
-        (candidate.required || candidate.appliesWhen?.(answers)),
-    )
-    .filter((candidate) => typeof answers.scored[candidate.id] === "number")
-    .sort(
-      (left, right) =>
-        Number(answers.scored[left.id]) - Number(answers.scored[right.id]),
-    )[0];
+): { value: number | "unknown"; evidence: string } | null => {
+  const applicable = QUESTION_BANK.filter(
+    (candidate) =>
+      candidate.component === component &&
+      (candidate.required || candidate.appliesWhen?.(answers)),
+  );
+  const unknown = applicable.find(
+    (candidate) => answers.scored[candidate.id] === "unknown",
+  );
+  const question =
+    unknown ??
+    applicable
+      .filter((candidate) => typeof answers.scored[candidate.id] === "number")
+      .sort(
+        (left, right) =>
+          Number(answers.scored[left.id]) - Number(answers.scored[right.id]),
+      )[0];
 
   if (!question) {
-    return "No complete self-reported response was available for this component.";
+    return null;
   }
 
   const value = answers.scored[question.id];
   const option = question.options.find((candidate) => candidate.value === value);
-  return `Self-reported response: ${question.prompt} ${option?.label ?? String(value)}.`;
+  return {
+    value: value as number | "unknown",
+    evidence: `Self-reported response: ${question.prompt} ${
+      option?.label ?? String(value)
+    }.`,
+  };
 };
 
 const buildRisks = (
@@ -131,12 +141,20 @@ const buildRisks = (
     });
   }
 
+  if (score.category === "incomplete") {
+    return findings.slice(0, 3);
+  }
+
   for (const [component, componentScore] of rankedComponents) {
     if (componentScore.score === null) continue;
+    const predicate = evidencePredicateForComponent(component, answers);
+    if (!predicate) continue;
     const kind =
-      componentScore.score < 45
+      predicate.value === "unknown"
+        ? "watchpoint"
+        : predicate.value < 45
         ? "risk"
-        : componentScore.score < 80
+        : predicate.value < 80
           ? "watchpoint"
           : "strength";
     const definition = COMPONENT_FINDINGS[component][kind];
@@ -144,7 +162,7 @@ const buildRisks = (
       code: definition.code,
       kind,
       label: definition.label,
-      evidence: evidenceForComponent(component, answers),
+      evidence: predicate.evidence,
     });
   }
 
