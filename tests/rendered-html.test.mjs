@@ -168,6 +168,97 @@ test("renders the Business Independence Assessment entry experience", async () =
   assert.match(html, /Start the assessment/i);
 });
 
+test("assessment and paid diagnostic remain separate, non-overlapping routes", async () => {
+  const [diagnosticHtml, assessmentHtml] = await Promise.all([
+    request("/diagnostic").then((response) => response.text()),
+    request("/assessment").then((response) => response.text()),
+  ]);
+  assert.match(diagnosticHtml, /In two weeks, identify where your business still depends on you/i);
+  assert.match(diagnosticHtml, /Investment is confirmed after an initial discovery conversation/i);
+  assert.doesNotMatch(diagnosticHtml, /approximately five minutes|deterministic scoring|Start the assessment/i);
+
+  assert.match(assessmentHtml, /How independently can your business operate\?/i);
+  assert.match(assessmentHtml, /Start the assessment/i);
+  assert.doesNotMatch(
+    assessmentHtml,
+    /In two weeks, identify where your business still depends on you|Investment is confirmed after an initial discovery conversation/i,
+  );
+});
+
+test("privacy route describes compact retention and the contact-page deletion channel", async () => {
+  const response = await request("/privacy");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /compact record is retained/i);
+  assert.match(
+    html,
+    /retained for a period that will be set and published here before this feature is enabled in production/i,
+  );
+  assert.match(
+    html,
+    /request correction or deletion of any retained assessment record using the contact page/i,
+  );
+});
+
+test("assessment calculation succeeds whether or not the optional phone and marketing consent fields are provided", async (t) => {
+  const fixtures = [
+    { label: "no phone, marketing consent declined", lead: {} },
+    {
+      label: "phone provided, marketing consent accepted",
+      lead: { phone: "+1 843 555 0100", marketingConsent: true },
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(validAssessmentPayload({ lead: fixture.lead })),
+      });
+      assert.equal(response.status, 200);
+      const body = await response.json();
+      assert.equal(body.ok, true);
+    });
+  }
+});
+
+test("a restricted-market submission's routed result never contains a consulting invitation", async () => {
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(validAssessmentPayload({ answers: { restrictedMarket: true } })),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.result.interpretation.route, "restricted");
+  assert.equal(body.result.cta.href, "/founder-resources");
+  const commercialSurface = `${body.result.cta.label} ${body.result.cta.reason} ${body.result.narrative.summary}`;
+  assert.doesNotMatch(commercialSurface, /consult|diagnostic|schedule a call|discovery conversation/i);
+});
+
+test("assessment calculation reports unavailable persistence without discarding the deterministic result", async () => {
+  // In this build/test environment no D1 binding is configured (only ASSETS
+  // is provided to worker.fetch), so this exercises the same
+  // persistence-unavailable path that drives the client's "Print or save as
+  // PDF" fallback copy (see FullResult.tsx and
+  // tests/component/assessment-results.test.mjs "full result offers browser
+  // print when report persistence is unavailable"). It also confirms the
+  // methodologyVersion contract the "Methodology and limitations" section
+  // relies on is present and correctly versioned.
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(validAssessmentPayload()),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.persistenceAvailable, false);
+  assert.equal(body.result.methodologyVersion, "1.0.0");
+});
+
 test("contact endpoint rejects invalid inquiries", async () => {
   const response = await request("/api/contact", {
     method: "POST",

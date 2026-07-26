@@ -214,6 +214,122 @@ test("rules narratives distinguish low-confidence and incomplete evidence states
   assert.notEqual(lowConfidence.narrative.summary, incomplete.narrative.summary);
 });
 
+// ---------------------------------------------------------------------------
+// Score-confidence x impact-confidence result matrix (Task 12, Step 3).
+//
+// Each row below is a distinct combination of score confidence (derived from
+// scoring.ts coverage/Unknown thresholds) and impact confidence (derived from
+// capacity.ts input source and category count), asserting the specific
+// presentation the brief's matrix requires for that combination.
+// ---------------------------------------------------------------------------
+
+const exactCapacity = {
+  source: "exact",
+  activities: [
+    { activityId: "owner-exact", category: "owner", hoursPerOccurrence: 2, occurrencesPerYear: 50, hourlyCost: 100 },
+    { activityId: "reporting-exact", category: "reporting", people: 2, hoursPerOccurrence: 5, occurrencesPerYear: 20, hourlyCost: 60 },
+  ],
+};
+const bandedCapacity = {
+  source: "banded",
+  activities: [
+    { activityId: "owner-banded", category: "owner", hoursPerOccurrence: 1.5, occurrencesPerYear: 52, hourlyCost: 100 },
+    { activityId: "reporting-banded", category: "reporting", people: 3, hoursPerOccurrence: 3, occurrencesPerYear: 12, hourlyCost: 50 },
+  ],
+};
+const singleCategoryCapacity = {
+  source: "exact",
+  activities: [
+    { activityId: "owner-only", category: "owner", hoursPerOccurrence: 2, occurrencesPerYear: 50, hourlyCost: 100 },
+  ],
+};
+
+test("High score confidence / High impact confidence: scores plus a calculated capacity range", () => {
+  const result = buildAssessmentResult({ ...answers, capacity: exactCapacity });
+
+  assert.equal(result.score.confidence.level, "high");
+  assert.equal(result.score.overall, 50);
+  assert.equal(result.capacity.confidence, "high");
+  assert.equal(result.capacity.estimateType, "calculated");
+  assert.ok(result.capacity.annualValue);
+});
+
+test("High score confidence / Medium impact confidence: scores plus a directional capacity range", () => {
+  const result = buildAssessmentResult({ ...answers, capacity: bandedCapacity });
+
+  assert.equal(result.score.confidence.level, "high");
+  assert.equal(result.score.overall, 50);
+  assert.equal(result.capacity.confidence, "medium");
+  assert.equal(result.capacity.estimateType, "directional");
+  assert.ok(result.capacity.annualValue);
+});
+
+test("High score confidence / Low impact confidence: scores plus non-financial indicators only", () => {
+  const result = buildAssessmentResult({ ...answers, capacity: singleCategoryCapacity });
+
+  assert.equal(result.score.confidence.level, "high");
+  assert.equal(result.score.overall, 50);
+  assert.equal(result.capacity.confidence, "low");
+  assert.equal(result.capacity.estimateType, "unavailable");
+  assert.equal(result.capacity.annualValue, null);
+  assert.ok(result.capacity.grossHours.total > 0, "non-financial gross hours remain visible");
+  assert.ok(
+    result.missingEvidence.some((gap) => /would improve impact confidence/i.test(gap)),
+  );
+});
+
+test("Medium score confidence / High impact confidence: scores with evidence gaps plus a calculated capacity range", () => {
+  const scored = {
+    ...answers.scored,
+    managerAuthority: "unknown",
+    exceptionResolution: "unknown",
+    kpiAvailability: "unknown",
+  };
+  const result = buildAssessmentResult({ ...answers, scored, capacity: exactCapacity });
+
+  assert.equal(result.score.confidence.level, "medium");
+  assert.equal(result.score.overall, 50);
+  assert.deepEqual(result.missingEvidence, ["3 Unknown responses reduced confidence."]);
+  assert.equal(result.capacity.confidence, "high");
+  assert.equal(result.capacity.estimateType, "calculated");
+  assert.ok(result.capacity.annualValue);
+});
+
+test("Low score confidence / Medium impact confidence: a preliminary score caveat plus a directional capacity range", () => {
+  const scored = {
+    ...answers.scored,
+    workWaiting: "unknown",
+    crossTraining: "unknown",
+    manualReporting: "unknown",
+    kpiCadence: "unknown",
+  };
+  const result = buildAssessmentResult({ ...answers, scored, capacity: bandedCapacity });
+
+  assert.equal(result.score.confidence.level, "low");
+  assert.equal(result.score.overall, 50);
+  assert.match(result.narrative.summary, /preliminary/i);
+  assert.match(result.narrative.summary, /low score confidence/i);
+  assert.equal(result.capacity.confidence, "medium");
+  assert.equal(result.capacity.estimateType, "directional");
+  assert.ok(result.capacity.annualValue);
+});
+
+test("Incomplete score confidence never produces a numeric overall score, regardless of impact confidence", async (t) => {
+  const scored = Object.fromEntries(QUESTION_BANK.map((question) => [question.id, "unknown"]));
+  for (const [label, capacity] of [
+    ["high impact confidence", exactCapacity],
+    ["medium impact confidence", bandedCapacity],
+    ["low impact confidence", singleCategoryCapacity],
+  ]) {
+    await t.test(label, () => {
+      const result = buildAssessmentResult({ ...answers, scored, capacity });
+      assert.equal(result.score.confidence.level, "incomplete");
+      assert.equal(result.score.overall, null);
+      assert.equal(result.score.category, "incomplete");
+    });
+  }
+});
+
 test("banded results disclose selected self-reported midpoint assumptions", () => {
   const result = buildAssessmentResult(
     answersAt(50, {
