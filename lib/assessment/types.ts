@@ -11,8 +11,8 @@ export type ContextAnswers = {
   managerBand: string;
   revenueBand: string;
   role: string;
-  coreSystemCount: "one" | "twoOrMore";
-  organizationShape: "singleTeam" | "multipleTeams";
+  coreSystemCount: "" | "one" | "twoOrMore";
+  organizationShape: "" | "singleTeam" | "multipleTeams";
   relationshipLedByOwner: boolean;
   restrictedMarket: boolean;
 };

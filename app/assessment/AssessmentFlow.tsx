@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QUESTION_BANK } from "../../lib/assessment/questions";
 import type {
   AnswerValue,
@@ -17,8 +17,8 @@ const EMPTY: AssessmentAnswers = {
   managerBand: "",
   revenueBand: "",
   role: "",
-  coreSystemCount: "one",
-  organizationShape: "singleTeam",
+  coreSystemCount: "",
+  organizationShape: "",
   relationshipLedByOwner: false,
   restrictedMarket: false,
   scored: {},
@@ -172,10 +172,23 @@ export function AssessmentFlow() {
   });
   const [screen, setScreen] = useState<Screen>("landing");
   const [questionIndex, setQuestionIndex] = useState(0);
+  const stepRef = useRef<HTMLElement>(null);
+  const previousStep = useRef<{ screen: Screen; questionIndex: number } | null>(null);
 
   useEffect(() => {
     saveSession(answers);
   }, [answers]);
+
+  useEffect(() => {
+    const previous = previousStep.current;
+    previousStep.current = { screen, questionIndex };
+    if (
+      previous &&
+      (previous.screen !== screen || previous.questionIndex !== questionIndex)
+    ) {
+      stepRef.current?.focus();
+    }
+  }, [questionIndex, screen]);
 
   const applicable = useMemo(
     () => QUESTION_BANK.filter((question) => question.required || question.appliesWhen?.(answers)),
@@ -266,7 +279,13 @@ export function AssessmentFlow() {
     <div className="assessment-shell">
       <Progress screen={screen} currentQuestion={currentQuestion} applicable={applicable} />
 
-      <section className="assessment-card" aria-live="polite">
+      <section
+        ref={stepRef}
+        className="assessment-card"
+        aria-label="Assessment step"
+        aria-live="polite"
+        tabIndex={-1}
+      >
         {screen === "landing" && (
           <>
             <div className="assessment-kicker">Business Independence Assessment</div>
