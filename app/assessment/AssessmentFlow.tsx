@@ -226,6 +226,8 @@ export function AssessmentFlow() {
     null,
   );
   const [deliveryUnavailable, setDeliveryUnavailable] = useState(false);
+  const [assessmentId, setAssessmentId] = useState<string | null>(null);
+  const [persistenceAvailable, setPersistenceAvailable] = useState(false);
   const [apiValidationError, setApiValidationError] = useState<string | null>(
     null,
   );
@@ -338,19 +340,25 @@ export function AssessmentFlow() {
         }
         const body = (await response.json()) as {
           ok?: boolean;
+          assessmentId?: string;
           result?: AssessmentResult;
+          persistenceAvailable?: boolean;
         };
         if (body.ok !== true || !body.result) {
           throw new Error("Assessment result was not persisted.");
         }
         if (!active) return;
         setServerResult(body.result);
-        setDeliveryUnavailable(false);
+        setAssessmentId(body.assessmentId ?? null);
+        setPersistenceAvailable(body.persistenceAvailable === true);
+        setDeliveryUnavailable(body.persistenceAvailable !== true);
         setApiValidationError(null);
         setScreen("full");
       } catch {
         if (!active || controller.signal.aborted) return;
         setServerResult(null);
+        setAssessmentId(null);
+        setPersistenceAvailable(false);
         setDeliveryUnavailable(true);
         setApiValidationError(null);
         setScreen("full");
@@ -778,7 +786,11 @@ export function AssessmentFlow() {
                 delivery are temporarily unavailable.
               </p>
             )}
-            <FullResult result={serverResult ?? result} />
+            <FullResult
+              result={serverResult ?? result}
+              assessmentId={assessmentId ?? undefined}
+              persistenceAvailable={persistenceAvailable}
+            />
           </>
         )}
       </section>

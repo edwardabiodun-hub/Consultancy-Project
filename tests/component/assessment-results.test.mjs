@@ -433,8 +433,9 @@ test("full result renders the controlled executive sequence and bounded outputs"
   const result = buildAssessmentResult(exactAnswers);
   const view = render(
     React.createElement(FullResult, {
-      answers: exactAnswers,
       result,
+      assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159",
+      persistenceAvailable: true,
     }),
   );
 
@@ -481,5 +482,45 @@ test("full result renders the controlled executive sequence and bounded outputs"
       name: "Get the 90-Day Business Independence Checklist",
     }),
   );
+  const download = screen.getByRole("link", {
+    name: "Download executive summary",
+  });
+  assert.equal(
+    download.getAttribute("href"),
+    "/api/assessment/8d7b76ca-86bf-46a6-88f4-42b6dfecd159/report",
+  );
+  assert.equal(download.hasAttribute("download"), true);
   assert.equal(screen.queryByRole("meter"), null);
+});
+
+test("full result offers browser print when report persistence is unavailable", async () => {
+  const user = userEvent.setup();
+  const result = buildAssessmentResult(exactAnswers);
+  let printed = false;
+  const originalPrint = window.print;
+  window.print = () => {
+    printed = true;
+  };
+
+  try {
+    const view = render(
+      React.createElement(FullResult, {
+        result,
+        assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159",
+        persistenceAvailable: false,
+      }),
+    );
+
+    assert.equal(
+      screen.queryByRole("link", { name: "Download executive summary" }),
+      null,
+    );
+    assert.match(view.container.textContent, /email delivery is unavailable/i);
+    await user.click(
+      screen.getByRole("button", { name: "Print or save as PDF" }),
+    );
+    assert.equal(printed, true);
+  } finally {
+    window.print = originalPrint;
+  }
 });

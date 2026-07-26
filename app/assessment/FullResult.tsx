@@ -3,6 +3,8 @@ import type { ComponentId } from "../../lib/assessment/types";
 
 type FullResultProps = {
   result: AssessmentResult;
+  assessmentId?: string;
+  persistenceAvailable?: boolean;
 };
 
 const COMPONENT_LABELS: Record<ComponentId, string> = {
@@ -29,7 +31,11 @@ const currency = new Intl.NumberFormat("en-US", {
 const titleCase = (value: string) =>
   value.replace(/([A-Z])/g, " $1").replace(/^./, (character) => character.toUpperCase());
 
-export function FullResult({ result }: FullResultProps) {
+export function FullResult({
+  result,
+  assessmentId,
+  persistenceAvailable = false,
+}: FullResultProps) {
   const components = Object.entries(result.score.components) as [
     ComponentId,
     AssessmentResult["score"]["components"][ComponentId],
@@ -48,6 +54,28 @@ export function FullResult({ result }: FullResultProps) {
         <span>{CATEGORY_LABELS[result.score.category]}</span>
         <span>Score confidence: {result.score.confidence.level}</span>
         <span>Impact confidence: {capacity.confidence}</span>
+      </div>
+
+      <div className="assessment-report-actions">
+        {persistenceAvailable && assessmentId ? (
+          <a
+            className="button"
+            href={`/api/assessment/${encodeURIComponent(assessmentId)}/report`}
+            download
+          >
+            Download executive summary
+          </a>
+        ) : (
+          <>
+            <button className="button" type="button" onClick={() => window.print()}>
+              Print or save as PDF
+            </button>
+            <p>
+              Report storage and email delivery is unavailable. Use the browser
+              print dialog to save this on-screen result.
+            </p>
+          </>
+        )}
       </div>
 
       <section className="assessment-result-section" aria-labelledby="executive-interpretation">

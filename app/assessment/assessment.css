@@ -634,6 +634,20 @@
   margin-top: 0.75rem;
 }
 
+.assessment-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0 0;
+}
+
+.assessment-report-actions p {
+  max-width: 30rem;
+  margin: 0;
+  color: var(--muted, #5f6861);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 620px) {
   .assessment-shell {
     width: min(100% - 1.25rem, 760px);
@@ -685,5 +699,33 @@
 @media (prefers-reduced-motion: reduce) {
   .assessment-progress > span {
     transition: none;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  header,
+  footer,
+  .assessment-progress-wrap,
+  .assessment-report-actions,
+  .assessment-validation {
+    display: none !important;
+  }
+
+  .assessment-shell,
+  .assessment-card {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .assessment-result-section {
+    break-inside: avoid;
   }
 }
