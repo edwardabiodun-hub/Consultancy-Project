@@ -161,3 +161,59 @@ The executable suite covers:
 
 - No Task 6 type errors remain.
 - The command remains non-zero only for the previously documented `PrecisionInputs.tsx` union-narrowing error and missing Cloudflare ambient types.
+
+## Round 2 End-to-End Trust-Boundary Fix
+
+### Findings addressed
+
+- Added shared runtime canonical capacity normalization to `capacity-contract.ts`.
+- Session recovery now:
+  - retains canonical exact and disclosed banded capacity;
+  - resets invented IDs, source-crossed IDs, modified banded values, duplicate identities/categories, and out-of-range exact values to `{ source: "none", activities: [] }`;
+  - preserves the remaining valid assessment context and scored answers when only recovered capacity is unsafe.
+- Precision inputs now use the shared inclusive maxima in both HTML constraints and submission validation:
+  - people: `1–10000`;
+  - hours per occurrence: `0–168`;
+  - occurrences per year: `0–365`;
+  - hourly cost: `0–10000`.
+- Assessment processing now separates client/input rejection from service availability:
+  - structured 4xx/422 responses never enter the full-result screen and never render the local fallback;
+  - rejected capacity is cleared and the user returns to precision with controlled copy;
+  - lead, context, and scored-answer error paths return to their relevant input/review screen;
+  - server-provided error values are never rendered;
+  - network failures, 5xx responses, and malformed unavailable-service success responses alone use the complete valid local fallback with the no-storage/delivery warning.
+
+### TDD red evidence
+
+`node --import=tsx --test tests\assessment\session.test.mjs tests\component\assessment-results.test.mjs`
+
+- Four forged-session fixtures failed because unsafe capacity was retained.
+- Precision maximum assertions failed because inputs had no `max` contract.
+
+`node --import=tsx --test --test-name-pattern="structured 422|5xx response" tests\component\assessment-flow.test.mjs`
+
+- Structured 422 failed because it transitioned to full and displayed the outage fallback.
+- The 5xx fallback control remained green.
+
+### Focused green evidence
+
+- Session and precision focused suite: 27 tests passed, 0 failed.
+- Network, structured 422, and 5xx focused flow suite: 3 tests passed, 0 failed.
+
+### Final round verification
+
+`npm.cmd run lint`
+
+- Exit `0`; no ESLint errors.
+
+`npm.cmd test`
+
+- Exit `0`; domain, component, API/rendered, and production-build stages all passed.
+- Domain includes canonical recovery/reset cases.
+- Component includes precision maxima, 422 rejection, network fallback, and 5xx fallback.
+- Rendered/API: 50 tests passed.
+
+`npm.cmd exec -- tsc --noEmit`
+
+- No new round-two type errors.
+- The same pre-existing `PrecisionInputs.tsx` discriminated-union error and missing Cloudflare ambient types remain.

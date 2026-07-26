@@ -130,3 +130,90 @@ test("loadSession rejects valid JSON with an invalid stored shape", async (t) =>
     });
   }
 });
+
+test("loadSession resets non-canonical recovered capacity without discarding answers", async (t) => {
+  const fixtures = [
+    {
+      name: "invented exact ID",
+      capacity: {
+        source: "exact",
+        activities: [
+          {
+            ...validAnswers.capacity.activities[0],
+            activityId: "invented-owner-v1",
+          },
+        ],
+      },
+    },
+    {
+      name: "source-crossed ID",
+      capacity: {
+        source: "banded",
+        activities: [validAnswers.capacity.activities[0]],
+      },
+    },
+    {
+      name: "modified banded preset",
+      capacity: {
+        source: "banded",
+        activities: [
+          {
+            activityId: "banded-owner-v1",
+            category: "owner",
+            hoursPerOccurrence: 1.6,
+            occurrencesPerYear: 52,
+            hourlyCost: 100,
+          },
+        ],
+      },
+    },
+    {
+      name: "over-limit exact value",
+      capacity: {
+        source: "exact",
+        activities: [
+          {
+            ...validAnswers.capacity.activities[0],
+            hoursPerOccurrence: 169,
+          },
+        ],
+      },
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    await t.test(fixture.name, () => {
+      installStorage({
+        getItem: () =>
+          JSON.stringify({ ...validAnswers, capacity: fixture.capacity }),
+      });
+      const recovered = loadSession();
+      assert.equal(recovered.employeeBand, validAnswers.employeeBand);
+      assert.deepEqual(recovered.scored, validAnswers.scored);
+      assert.deepEqual(recovered.capacity, {
+        source: "none",
+        activities: [],
+      });
+    });
+  }
+});
+
+test("loadSession retains a canonical disclosed banded preset", () => {
+  const capacity = {
+    source: "banded",
+    activities: [
+      {
+        activityId: "banded-owner-v1",
+        category: "owner",
+        hoursPerOccurrence: 1.5,
+        occurrencesPerYear: 52,
+        hourlyCost: 100,
+      },
+    ],
+  };
+  installStorage({
+    getItem: () => JSON.stringify({ ...validAnswers, capacity }),
+  });
+
+  assert.deepEqual(loadSession().capacity, capacity);
+});

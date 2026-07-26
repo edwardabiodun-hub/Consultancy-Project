@@ -546,3 +546,60 @@ test("server failure retains the local rules result and reports unavailable pers
     /your result is available on screen, but report storage and delivery are temporarily unavailable/i,
   );
 });
+
+test("a structured 422 returns to precision without rendering a result or server error values", async () => {
+  globalThis.fetch = async () =>
+    Response.json(
+      {
+        ok: false,
+        errors: {
+          "answers.capacity.activities.0.hourlyCost":
+            "Private Person private.person@example.com",
+        },
+      },
+      { status: 422 },
+    );
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+
+  await screen.findByRole("heading", { name: "Improve the capacity estimate." });
+  assert.equal(
+    screen.queryByRole("heading", { name: "0 out of 100" }),
+    null,
+  );
+  assert.doesNotMatch(
+    document.body.textContent,
+    /report storage and delivery are temporarily unavailable/i,
+  );
+  assert.doesNotMatch(
+    document.body.textContent,
+    /Private Person|private\.person@example\.com/i,
+  );
+  assert.match(
+    screen.getByRole("alert").textContent,
+    /could not validate the capacity inputs/i,
+  );
+});
+
+test("a 5xx response retains the valid local result with the outage warning", async () => {
+  globalThis.fetch = async () =>
+    Response.json({ ok: false }, { status: 503 });
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  assert.match(
+    screen.getByRole("status").textContent,
+    /report storage and delivery are temporarily unavailable/i,
+  );
+});

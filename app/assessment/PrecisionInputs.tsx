@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { PRECISION_ACTIVITY_IDS } from "../../lib/assessment/capacity-contract";
+import {
+  CAPACITY_LIMITS,
+  PRECISION_ACTIVITY_IDS,
+} from "../../lib/assessment/capacity-contract";
 import type {
   CapacityActivity,
   CapacityCategory,
@@ -39,7 +42,9 @@ const FIELD_LABELS: Record<ActivityField, string> = {
 const fieldsFor = (category: CapacityCategory): ActivityField[] =>
   category === "owner"
     ? ["hoursPerOccurrence", "occurrencesPerYear", "hourlyCost"]
-    : ["people", "hoursPerOccurrence", "occurrencesPerYear", "hourlyCost"];
+      : ["people", "hoursPerOccurrence", "occurrencesPerYear", "hourlyCost"];
+
+const limitsFor = (field: ActivityField) => CAPACITY_LIMITS[field];
 
 const joinLabels = (labels: string[]) =>
   labels.length < 2
@@ -69,7 +74,16 @@ const isComplete = (draft: ActivityDraft, category: CapacityCategory) => {
   if (values.some((value) => value === "")) return false;
 
   const numbers = values.map(Number);
-  if (numbers.some((value) => !Number.isFinite(value) || value < 0)) return false;
+  if (
+    numbers.some(
+      (value, index) =>
+        !Number.isFinite(value) ||
+        value < limitsFor(fieldsFor(category)[index]).min ||
+        value > limitsFor(fieldsFor(category)[index]).max,
+    )
+  ) {
+    return false;
+  }
   return (
     category === "owner" ||
     (Number.isInteger(Number(draft.people)) && Number(draft.people) > 0)
@@ -85,7 +99,14 @@ const validationFor = (draft: ActivityDraft, category: CapacityCategory) => {
   const invalid = fields.filter((field) => {
     if (draft[field] === "") return false;
     const number = Number(draft[field]);
-    if (!Number.isFinite(number) || number < 0) return true;
+    const limits = limitsFor(field);
+    if (
+      !Number.isFinite(number) ||
+      number < limits.min ||
+      number > limits.max
+    ) {
+      return true;
+    }
     return field === "people" && (!Number.isInteger(number) || number <= 0);
   });
   return { missing, invalid };
@@ -112,6 +133,7 @@ function NumericField({
   label,
   value,
   integer = false,
+  max,
   invalid = false,
   describedBy,
   onChange,
@@ -120,6 +142,7 @@ function NumericField({
   label: string;
   value: string;
   integer?: boolean;
+  max: number;
   invalid?: boolean;
   describedBy?: string;
   onChange: (value: string) => void;
@@ -131,6 +154,7 @@ function NumericField({
         id={id}
         type="number"
         min={integer ? 1 : 0}
+        max={max}
         step={integer ? 1 : "any"}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -184,6 +208,7 @@ function ActivityFields({
             label="People involved"
             value={draft.people}
             integer
+            max={CAPACITY_LIMITS.people.max}
             invalid={invalid("people")}
             describedBy={describedBy("people")}
             onChange={(people) => onChange({ ...draft, people })}
@@ -193,6 +218,7 @@ function ActivityFields({
           id={`${prefix}-hours`}
           label="Hours per occurrence"
           value={draft.hoursPerOccurrence}
+          max={CAPACITY_LIMITS.hoursPerOccurrence.max}
           invalid={invalid("hoursPerOccurrence")}
           describedBy={describedBy("hoursPerOccurrence")}
           onChange={(hoursPerOccurrence) => onChange({ ...draft, hoursPerOccurrence })}
@@ -201,6 +227,7 @@ function ActivityFields({
           id={`${prefix}-frequency`}
           label="Occurrences per year"
           value={draft.occurrencesPerYear}
+          max={CAPACITY_LIMITS.occurrencesPerYear.max}
           invalid={invalid("occurrencesPerYear")}
           describedBy={describedBy("occurrencesPerYear")}
           onChange={(occurrencesPerYear) => onChange({ ...draft, occurrencesPerYear })}
@@ -209,6 +236,7 @@ function ActivityFields({
           id={`${prefix}-cost`}
           label="Hourly cost"
           value={draft.hourlyCost}
+          max={CAPACITY_LIMITS.hourlyCost.max}
           invalid={invalid("hourlyCost")}
           describedBy={describedBy("hourlyCost")}
           onChange={(hourlyCost) => onChange({ ...draft, hourlyCost })}
@@ -220,7 +248,7 @@ function ActivityFields({
             ? `${categoryLabel}: ${joinLabels(missingLabels)} ${
                 missingLabels.length === 1 ? "is" : "are"
               } required.`
-            : `${categoryLabel}: enter valid non-negative values; people must be a whole number greater than zero.`}
+            : `${categoryLabel}: enter values within the displayed limits; people must be a whole number.`}
         </p>
       )}
       {children}

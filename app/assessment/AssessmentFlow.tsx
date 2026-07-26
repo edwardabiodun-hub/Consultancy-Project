@@ -226,6 +226,9 @@ export function AssessmentFlow() {
     null,
   );
   const [deliveryUnavailable, setDeliveryUnavailable] = useState(false);
+  const [apiValidationError, setApiValidationError] = useState<string | null>(
+    null,
+  );
   const stepRef = useRef<HTMLElement>(null);
   const previousStep = useRef<{ screen: Screen; questionIndex: number } | null>(null);
 
@@ -276,21 +279,80 @@ export function AssessmentFlow() {
           }),
           new Promise((resolve) => window.setTimeout(resolve, 50)),
         ]);
+        if (!response.ok && response.status < 500) {
+          const rejected = (await response.json().catch(() => null)) as {
+            errors?: unknown;
+          } | null;
+          if (!active) return;
+          const errorKeys =
+            rejected?.errors &&
+            typeof rejected.errors === "object" &&
+            !Array.isArray(rejected.errors)
+              ? Object.keys(rejected.errors)
+              : [];
+          setServerResult(null);
+          setDeliveryUnavailable(false);
+
+          if (errorKeys.some((key) => key.startsWith("lead."))) {
+            setApiValidationError(
+              "We could not validate the report contact details. Review them and try again.",
+            );
+            setScreen("contact");
+            return;
+          }
+          if (
+            errorKeys.some(
+              (key) =>
+                key.startsWith("answers.") &&
+                !key.startsWith("answers.capacity") &&
+                !key.startsWith("answers.scored"),
+            )
+          ) {
+            setApiValidationError(
+              "We could not validate the business context. Review it and try again.",
+            );
+            setScreen("context");
+            return;
+          }
+          if (errorKeys.some((key) => key.startsWith("answers.scored"))) {
+            setApiValidationError(
+              "We could not validate the scored answers. Review them before trying again.",
+            );
+            setScreen("preliminary");
+            return;
+          }
+
+          setAnswers((current) => ({
+            ...current,
+            capacity: { source: "none", activities: [] },
+          }));
+          setPrecisionDrafts(createEmptyPrecisionDrafts());
+          setApiValidationError(
+            "We could not validate the capacity inputs. Review the limits and try again.",
+          );
+          setScreen("precision");
+          return;
+        }
+        if (!response.ok) {
+          throw new Error("Assessment service is unavailable.");
+        }
         const body = (await response.json()) as {
           ok?: boolean;
           result?: AssessmentResult;
         };
-        if (!response.ok || body.ok !== true || !body.result) {
+        if (body.ok !== true || !body.result) {
           throw new Error("Assessment result was not persisted.");
         }
         if (!active) return;
         setServerResult(body.result);
         setDeliveryUnavailable(false);
+        setApiValidationError(null);
         setScreen("full");
       } catch {
         if (!active || controller.signal.aborted) return;
         setServerResult(null);
         setDeliveryUnavailable(true);
+        setApiValidationError(null);
         setScreen("full");
       }
     };
@@ -320,6 +382,7 @@ export function AssessmentFlow() {
     setAnswers((current) => ({ ...current, capacity }));
     setServerResult(null);
     setDeliveryUnavailable(false);
+    setApiValidationError(null);
     setScreen("processing");
   };
 
@@ -392,6 +455,11 @@ export function AssessmentFlow() {
         aria-live="polite"
         tabIndex={-1}
       >
+        {apiValidationError && (
+          <p className="assessment-validation" role="alert">
+            {apiValidationError}
+          </p>
+        )}
         {screen === "landing" && (
           <>
             <div className="assessment-kicker">Business Independence Assessment</div>
@@ -659,6 +727,7 @@ export function AssessmentFlow() {
             initialValue={leadDraft}
             onDraftChange={setLeadDraft}
             onSubmit={(lead) => {
+              setApiValidationError(null);
               setLeadDraft({
                 ...lead,
                 phone: lead.phone ?? "",
@@ -674,6 +743,7 @@ export function AssessmentFlow() {
             onUseEarlierRanges={() => {
               setServerResult(null);
               setDeliveryUnavailable(false);
+              setApiValidationError(null);
               setScreen("processing");
             }}
             onSkip={() =>

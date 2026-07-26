@@ -4,6 +4,7 @@ import type {
   CapacityActivity,
   CapacityInputs,
 } from "./types";
+import { normalizeCanonicalCapacity } from "./capacity-contract";
 
 export const SESSION_KEY = "business-independence-assessment-v1";
 
@@ -76,7 +77,12 @@ const normalizeCapacity = (value: unknown): CapacityInputs | null => {
     return null;
   }
 
-  return { source: value.source, activities: value.activities };
+  return (
+    normalizeCanonicalCapacity(value) ?? {
+      source: "none",
+      activities: [],
+    }
+  );
 };
 
 const normalizeAnswers = (value: unknown): AssessmentAnswers | null => {

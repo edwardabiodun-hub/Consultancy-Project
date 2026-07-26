@@ -250,6 +250,58 @@ test("exact inputs produce exclusive activities with stable unique IDs", async (
   assert.ok(screen.getByRole("button", { name: "Skip financial estimate" }));
 });
 
+test("precision inputs enforce the shared inclusive maxima before submission", async () => {
+  const user = userEvent.setup();
+  let submitted = null;
+  render(
+    React.createElement(PrecisionInputs, {
+      onBack: () => {},
+      onUseEarlierRanges: () => {},
+      onSkip: () => {},
+      hasEarlierRanges: false,
+      onComplete: (capacity) => {
+        submitted = capacity;
+      },
+    }),
+  );
+
+  const owner = screen.getByRole("group", { name: "Owner intervention" });
+  const reporting = screen.getByRole("group", {
+    name: "Team reporting and reconciliation",
+  });
+  const ownerFields = within(owner).getAllByRole("spinbutton");
+  const reportingFields = within(reporting).getAllByRole("spinbutton");
+  for (const [field, value] of [
+    [ownerFields[0], "169"],
+    [ownerFields[1], "366"],
+    [ownerFields[2], "10001"],
+    [reportingFields[0], "10001"],
+    [reportingFields[1], "1"],
+    [reportingFields[2], "1"],
+    [reportingFields[3], "1"],
+  ]) {
+    await user.type(field, value);
+  }
+
+  assert.equal(ownerFields[0].max, "168");
+  assert.equal(ownerFields[1].max, "365");
+  assert.equal(ownerFields[2].max, "10000");
+  assert.equal(reportingFields[0].max, "10000");
+  await user.click(
+    screen.getByRole("button", { name: "Calculate with exact inputs" }),
+  );
+
+  assert.equal(submitted, null);
+  assert.equal(ownerFields[0].getAttribute("aria-invalid"), "true");
+  assert.equal(ownerFields[1].getAttribute("aria-invalid"), "true");
+  assert.equal(ownerFields[2].getAttribute("aria-invalid"), "true");
+  assert.equal(reportingFields[0].getAttribute("aria-invalid"), "true");
+  assert.match(
+    within(owner).getByRole("alert").textContent,
+    /within the displayed limits/i,
+  );
+});
+
 test("precision copy is truthful when no earlier banded range exists", async () => {
   const user = userEvent.setup();
   let skipped = false;
