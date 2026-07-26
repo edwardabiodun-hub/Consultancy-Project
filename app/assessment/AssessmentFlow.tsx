@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildAssessmentResult } from "../../lib/assessment/result";
+import type { AssessmentResult } from "../../lib/assessment/result";
 import { QUESTION_BANK } from "../../lib/assessment/questions";
 import type {
   AnswerValue,
@@ -221,6 +222,10 @@ export function AssessmentFlow() {
   const [precisionDrafts, setPrecisionDrafts] = useState<PrecisionDrafts>(
     createEmptyPrecisionDrafts,
   );
+  const [serverResult, setServerResult] = useState<AssessmentResult | null>(
+    null,
+  );
+  const [deliveryUnavailable, setDeliveryUnavailable] = useState(false);
   const stepRef = useRef<HTMLElement>(null);
   const previousStep = useRef<{ screen: Screen; questionIndex: number } | null>(null);
 
@@ -239,12 +244,6 @@ export function AssessmentFlow() {
     }
   }, [questionIndex, screen]);
 
-  useEffect(() => {
-    if (screen !== "processing") return;
-    const timer = window.setTimeout(() => setScreen("full"), 50);
-    return () => window.clearTimeout(timer);
-  }, [screen]);
-
   const applicable = useMemo(
     () => QUESTION_BANK.filter((question) => question.required || question.appliesWhen?.(answers)),
     [answers],
@@ -260,6 +259,48 @@ export function AssessmentFlow() {
   );
   const currentQuestion = screenQuestions[questionIndex];
   const result = useMemo(() => buildAssessmentResult(answers), [answers]);
+
+  useEffect(() => {
+    if (screen !== "processing") return;
+    const controller = new AbortController();
+    let active = true;
+
+    const calculate = async () => {
+      try {
+        const [response] = await Promise.all([
+          fetch("/api/assessment/calculate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ answers, lead: leadDraft }),
+            signal: controller.signal,
+          }),
+          new Promise((resolve) => window.setTimeout(resolve, 50)),
+        ]);
+        const body = (await response.json()) as {
+          ok?: boolean;
+          result?: AssessmentResult;
+        };
+        if (!response.ok || body.ok !== true || !body.result) {
+          throw new Error("Assessment result was not persisted.");
+        }
+        if (!active) return;
+        setServerResult(body.result);
+        setDeliveryUnavailable(false);
+        setScreen("full");
+      } catch {
+        if (!active || controller.signal.aborted) return;
+        setServerResult(null);
+        setDeliveryUnavailable(true);
+        setScreen("full");
+      }
+    };
+
+    void calculate();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [answers, leadDraft, screen]);
 
   const updateContext = <Key extends keyof AssessmentAnswers>(
     key: Key,
@@ -277,6 +318,8 @@ export function AssessmentFlow() {
 
   const continueWithCapacity = (capacity: CapacityInputs) => {
     setAnswers((current) => ({ ...current, capacity }));
+    setServerResult(null);
+    setDeliveryUnavailable(false);
     setScreen("processing");
   };
 
@@ -628,7 +671,11 @@ export function AssessmentFlow() {
         {screen === "precision" && (
           <PrecisionInputs
             onBack={goBack}
-            onUseEarlierRanges={() => setScreen("processing")}
+            onUseEarlierRanges={() => {
+              setServerResult(null);
+              setDeliveryUnavailable(false);
+              setScreen("processing");
+            }}
             onSkip={() =>
               continueWithCapacity({ source: "none", activities: [] })
             }
@@ -654,7 +701,15 @@ export function AssessmentFlow() {
         )}
 
         {screen === "full" && (
-          <FullResult result={result} />
+          <>
+            {deliveryUnavailable && (
+              <p className="assessment-validation" role="status">
+                Your result is available on screen, but report storage and
+                delivery are temporarily unavailable.
+              </p>
+            )}
+            <FullResult result={serverResult ?? result} />
+          </>
         )}
       </section>
     </div>

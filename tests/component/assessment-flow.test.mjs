@@ -6,6 +6,7 @@ const React = await import("react");
 const { cleanup, render, screen, within } = await import("@testing-library/react");
 const { default: userEvent } = await import("@testing-library/user-event");
 const { AssessmentFlow } = await import("../../app/assessment/AssessmentFlow.tsx");
+const { buildAssessmentResult } = await import("../../lib/assessment/result.ts");
 const { SESSION_KEY } = await import("../../lib/assessment/session.ts");
 
 const validStoredAnswers = {
@@ -22,6 +23,15 @@ const validStoredAnswers = {
 };
 
 const renderAssessment = () => render(React.createElement(AssessmentFlow));
+
+const successfulCalculationFetch = async (_input, init) => {
+  const payload = JSON.parse(String(init?.body));
+  return Response.json({
+    ok: true,
+    assessmentId: "123e4567-e89b-42d3-a456-426614174000",
+    result: buildAssessmentResult(payload.answers),
+  });
+};
 
 const fillRequiredSelects = async (user) => {
   await user.selectOptions(screen.getByRole("combobox", { name: "Employees" }), "20-49");
@@ -122,6 +132,10 @@ const submitLead = async (user) => {
 test.afterEach(() => {
   cleanup();
   sessionStorage.clear();
+});
+
+test.beforeEach(() => {
+  globalThis.fetch = successfulCalculationFetch;
 });
 
 test("the six required context fields gate entry to scored questions", async () => {
@@ -469,5 +483,66 @@ test("strong integrated results present strengths and an insights route", async 
   assert.equal(
     screen.queryByRole("link", { name: /Business Independence Diagnostic/i }),
     null,
+  );
+});
+
+test("full assessment renders the server result and sends only raw answers and lead details", async () => {
+  let submittedPayload;
+  globalThis.fetch = async (_input, init) => {
+    submittedPayload = JSON.parse(String(init?.body));
+    const serverAnswers = {
+      ...submittedPayload.answers,
+      scored: Object.fromEntries(
+        Object.keys(submittedPayload.answers.scored).map((questionId) => [
+          questionId,
+          100,
+        ]),
+      ),
+    };
+    return Response.json({
+      ok: true,
+      assessmentId: "123e4567-e89b-42d3-a456-426614174000",
+      result: buildAssessmentResult(serverAnswers),
+    });
+  };
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+
+  await screen.findByRole("heading", { name: "100 out of 100" });
+  assert.deepEqual(Object.keys(submittedPayload).sort(), ["answers", "lead"]);
+  assert.equal(submittedPayload.answers.scored.criticalDecisions, 0);
+  assert.equal(submittedPayload.answers.capacity.source, "none");
+  assert.deepEqual(submittedPayload.answers.capacity.activities, []);
+  assert.deepEqual(submittedPayload.lead, {
+    name: "Eddie Example",
+    workEmail: "eddie@example.com",
+    company: "Example Co",
+    phone: "",
+    reportConsent: true,
+    marketingConsent: false,
+  });
+});
+
+test("server failure retains the local rules result and reports unavailable persistence", async () => {
+  globalThis.fetch = async () => {
+    throw new Error("network unavailable");
+  };
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  assert.match(
+    screen.getByRole("status").textContent,
+    /your result is available on screen, but report storage and delivery are temporarily unavailable/i,
   );
 });

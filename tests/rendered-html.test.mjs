@@ -15,6 +15,49 @@ async function request(path = "/", init, env = {}) {
   );
 }
 
+const validAssessmentPayload = (overrides = {}) => ({
+  answers: {
+    employeeBand: "20-49",
+    managerBand: "3-5",
+    revenueBand: "5m-20m",
+    role: "Owner-operator",
+    coreSystemCount: "one",
+    organizationShape: "singleTeam",
+    relationshipLedByOwner: false,
+    restrictedMarket: false,
+    scored: {
+      criticalDecisions: 0,
+      twoWeekAbsence: 0,
+      managerAuthority: 0,
+      exceptionResolution: 0,
+      workWaiting: 0,
+      workflowDocumentation: 0,
+      processOwnership: 0,
+      decisionRules: 0,
+      crossTraining: 0,
+      managementCadence: 0,
+      kpiAvailability: 0,
+      manualReporting: 0,
+      dataTrust: 0,
+      detectionSpeed: 0,
+      kpiCadence: 0,
+    },
+    capacity: { source: "none", activities: [] },
+    ...overrides.answers,
+  },
+  lead: {
+    name: "Eddie Example",
+    workEmail: "eddie@example.com",
+    company: "Example Co",
+    reportConsent: true,
+    marketingConsent: false,
+    ...overrides.lead,
+  },
+  ...Object.fromEntries(
+    Object.entries(overrides).filter(([key]) => !["answers", "lead"].includes(key)),
+  ),
+});
+
 test("renders the founder-independence homepage and six-page navigation", async () => {
   const response = await request("/");
   assert.equal(response.status, 200);
@@ -160,4 +203,175 @@ test("contact endpoint does not claim delivery when email is not configured", as
   const body = await response.json();
   assert.equal(body.ok, false);
   assert.match(body.errors.form, /not yet configured/i);
+});
+
+test("assessment calculation rejects client-supplied scores and recomputes the result", async () => {
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ answers: { scored: {} }, overall: 100 }),
+  });
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).ok, false);
+});
+
+test("assessment calculation ignores browser result fields and returns a server result", async () => {
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      validAssessmentPayload({
+        overall: 100,
+        components: { ownerIndependence: { score: 100 } },
+        riskCodes: ["invented"],
+        route: "diagnostic",
+        financialOutputs: { annualValue: { low: 999999, high: 999999 } },
+      }),
+    ),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.match(
+    body.assessmentId,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  assert.equal(body.result.score.overall, 0);
+  assert.equal(body.result.interpretation.route, "diagnostic");
+  assert.equal(body.result.capacity.annualValue, null);
+  assert.deepEqual(body.result.score.riskCodes, []);
+});
+
+test("assessment calculation returns field-specific validation errors", async () => {
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      validAssessmentPayload({
+        answers: {
+          scored: { criticalDecisions: 17 },
+          unexpected: "tampered",
+        },
+        lead: { reportConsent: false },
+      }),
+    ),
+  });
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.ok(body.errors["answers.scored.criticalDecisions"]);
+  assert.ok(body.errors["answers.unexpected"]);
+  assert.ok(body.errors["lead.reportConsent"]);
+});
+
+test("assessment calculation rejects malformed JSON with a 422 response", async () => {
+  const response = await request("/api/assessment/calculate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{not-json",
+  });
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.ok(body.errors.form);
+});
+
+test("assessment calculation rejects adversarial capacity values and duplicate categories", async (t) => {
+  const invalidActivities = [
+    {
+      label: "people above limit",
+      activities: [{
+        activityId: "reporting-a",
+        category: "reporting",
+        people: 10001,
+        hoursPerOccurrence: 1,
+        occurrencesPerYear: 1,
+        hourlyCost: 1,
+      }],
+      field: "answers.capacity.activities.0.people",
+    },
+    {
+      label: "hours above limit",
+      activities: [{
+        activityId: "owner-a",
+        category: "owner",
+        hoursPerOccurrence: 169,
+        occurrencesPerYear: 1,
+        hourlyCost: 1,
+      }],
+      field: "answers.capacity.activities.0.hoursPerOccurrence",
+    },
+    {
+      label: "occurrences above limit",
+      activities: [{
+        activityId: "owner-a",
+        category: "owner",
+        hoursPerOccurrence: 1,
+        occurrencesPerYear: 366,
+        hourlyCost: 1,
+      }],
+      field: "answers.capacity.activities.0.occurrencesPerYear",
+    },
+    {
+      label: "cost above limit",
+      activities: [{
+        activityId: "owner-a",
+        category: "owner",
+        hoursPerOccurrence: 1,
+        occurrencesPerYear: 1,
+        hourlyCost: 10001,
+      }],
+      field: "answers.capacity.activities.0.hourlyCost",
+    },
+    {
+      label: "negative value",
+      activities: [{
+        activityId: "owner-a",
+        category: "owner",
+        hoursPerOccurrence: -1,
+        occurrencesPerYear: 1,
+        hourlyCost: 1,
+      }],
+      field: "answers.capacity.activities.0.hoursPerOccurrence",
+    },
+    {
+      label: "duplicate category",
+      activities: [
+        {
+          activityId: "owner-a",
+          category: "owner",
+          hoursPerOccurrence: 1,
+          occurrencesPerYear: 1,
+          hourlyCost: 1,
+        },
+        {
+          activityId: "owner-b",
+          category: "owner",
+          hoursPerOccurrence: 2,
+          occurrencesPerYear: 2,
+          hourlyCost: 2,
+        },
+      ],
+      field: "answers.capacity.activities.1.category",
+    },
+  ];
+
+  for (const fixture of invalidActivities) {
+    await t.test(fixture.label, async () => {
+      const response = await request("/api/assessment/calculate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(
+          validAssessmentPayload({
+            answers: {
+              capacity: { source: "exact", activities: fixture.activities },
+            },
+          }),
+        ),
+      });
+      assert.equal(response.status, 422);
+      const body = await response.json();
+      assert.ok(body.errors[fixture.field]);
+    });
+  }
 });
