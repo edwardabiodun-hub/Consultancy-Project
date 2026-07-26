@@ -488,7 +488,13 @@ test("strong integrated results present strengths and an insights route", async 
 
 test("full assessment renders the server result and sends only raw answers and lead details", async () => {
   let submittedPayload;
-  globalThis.fetch = async (_input, init) => {
+  globalThis.fetch = async (input, init) => {
+    // The analytics beacon (POST /api/assessment/events) shares the fetch
+    // mock in this test environment; only /api/assessment/calculate carries
+    // the answers/lead payload under assertion here.
+    if (!String(input).includes("/api/assessment/calculate")) {
+      return Response.json({ ok: true }, { status: 202 });
+    }
     submittedPayload = JSON.parse(String(init?.body));
     const serverAnswers = {
       ...submittedPayload.answers,

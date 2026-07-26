@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import type { AssessmentResult } from "../../lib/assessment/result";
 import type { ComponentId } from "../../lib/assessment/types";
+import { trackAssessmentEvent } from "../../lib/analytics/track";
+import type { AssessmentEventContext } from "../../lib/analytics/track";
 
 export type DeliveryState =
   | "idle"
@@ -53,6 +56,33 @@ export function FullResult({
   ][];
   const capacity = result.capacity;
 
+  // Non-identifying context shared by every event fired from this rendered
+  // result: which assessment (when persisted) and the deterministic
+  // category/confidence/route already visible on screen - never the
+  // underlying answers or contact details.
+  const eventContext: AssessmentEventContext = {
+    assessmentId: assessmentId ?? null,
+    screen: "full",
+    resultCategory: result.score.category,
+    scoreConfidence: result.score.confidence.level,
+    impactConfidence: capacity.confidence,
+    route: result.interpretation.route,
+  };
+
+  // The recommended-next-step CTA below always renders with this result, so
+  // report it as shown once per mount rather than wiring a render-count
+  // event into every branch of the JSX below.
+  useEffect(() => {
+    trackAssessmentEvent("cta_shown", eventContext);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    assessmentId,
+    result.score.category,
+    result.score.confidence.level,
+    capacity.confidence,
+    result.interpretation.route,
+  ]);
+
   return (
     <>
       <div className="assessment-kicker">Full assessment</div>
@@ -74,6 +104,11 @@ export function FullResult({
               className="button"
               href={`/api/assessment/${encodeURIComponent(assessmentId)}/report`}
               download
+              onClick={() =>
+                trackAssessmentEvent("pdf_downloaded", eventContext, {
+                  useBeacon: true,
+                })
+              }
             >
               Download executive summary
             </a>

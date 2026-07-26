@@ -52,3 +52,19 @@ export const assessmentRecords = sqliteTable("assessment_records", {
   narrativeSource: text("narrative_source").notNull(),
   reportDeliveryStatus: text("report_delivery_status").notNull(),
 });
+
+// Privacy-conscious product analytics for the assessment funnel. Only an
+// allowlisted event name plus coarse, non-identifying context is stored - no
+// IP address, user agent, raw answers, or contact details (see
+// lib/analytics/assessment.ts, which is the only writer of these rows).
+export const assessmentEvents = sqliteTable("assessment_events", {
+  id: text("id").primaryKey(),
+  assessmentId: text("assessment_id"),
+  eventName: text("event_name").notNull(),
+  screen: text("screen"),
+  resultCategory: text("result_category"),
+  scoreConfidence: text("score_confidence"),
+  impactConfidence: text("impact_confidence"),
+  route: text("route"),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

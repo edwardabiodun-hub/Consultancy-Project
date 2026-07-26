@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { buildAssessmentResult } from "../../lib/assessment/result";
 import type { AssessmentResult } from "../../lib/assessment/result";
 import { QUESTION_BANK } from "../../lib/assessment/questions";
@@ -12,6 +12,8 @@ import type {
   QuestionDefinition,
 } from "../../lib/assessment/types";
 import { loadSession, saveSession } from "../../lib/assessment/session";
+import { trackAssessmentEvent } from "../../lib/analytics/track";
+import type { AssessmentEventContext } from "../../lib/analytics/track";
 import { ContactGate } from "./ContactGate";
 import type { LeadDraft } from "./ContactGate";
 import { BandedCapacityInputs } from "./BandedCapacityInputs";
@@ -268,6 +270,24 @@ export function AssessmentFlow() {
   const currentQuestion = screenQuestions[questionIndex];
   const result = useMemo(() => buildAssessmentResult(answers), [answers]);
 
+  // Builds the non-identifying analytics context (screen plus deterministic
+  // result category/confidence/route) for the funnel event just reached or
+  // completed. `overrideResult` lets the "full" screen report the
+  // server-recomputed result rather than the locally memoized one.
+  const eventContext = useCallback(
+    (
+      forScreen: Screen,
+      overrideResult: AssessmentResult = result,
+    ): AssessmentEventContext => ({
+      screen: forScreen,
+      resultCategory: overrideResult.score.category,
+      scoreConfidence: overrideResult.score.confidence.level,
+      impactConfidence: overrideResult.capacity.confidence,
+      route: overrideResult.interpretation.route,
+    }),
+    [result],
+  );
+
   useEffect(() => {
     if (screen !== "processing") return;
     const controller = new AbortController();
@@ -358,6 +378,10 @@ export function AssessmentFlow() {
         setApiValidationError(null);
         setReportDeliveryState("idle");
         setScreen("full");
+        trackAssessmentEvent("full_result_viewed", {
+          ...eventContext("full", body.result),
+          assessmentId: body.assessmentId ?? null,
+        });
       } catch {
         if (!active || controller.signal.aborted) return;
         setServerResult(null);
@@ -367,6 +391,7 @@ export function AssessmentFlow() {
         setApiValidationError(null);
         setReportDeliveryState("idle");
         setScreen("full");
+        trackAssessmentEvent("full_result_viewed", eventContext("full"));
       }
     };
 
@@ -375,7 +400,7 @@ export function AssessmentFlow() {
       active = false;
       controller.abort();
     };
-  }, [answers, leadDraft, screen]);
+  }, [answers, leadDraft, screen, eventContext]);
 
   const deliverReport = async () => {
     if (!assessmentId) return;
@@ -434,6 +459,8 @@ export function AssessmentFlow() {
       return;
     }
 
+    trackAssessmentEvent("section_completed", eventContext(screen));
+
     const componentIndex = COMPONENTS.findIndex((component) => component.id === screen);
     const nextComponent = COMPONENTS[componentIndex + 1];
     if (nextComponent) {
@@ -441,6 +468,7 @@ export function AssessmentFlow() {
     } else {
       setScreen("preliminary");
       setQuestionIndex(0);
+      trackAssessmentEvent("preliminary_result_reached", eventContext("preliminary"));
     }
   };
 
@@ -526,7 +554,14 @@ export function AssessmentFlow() {
               </div>
             </dl>
             <div className="assessment-actions">
-              <button className="button" type="button" onClick={() => setScreen("context")}>
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  trackAssessmentEvent("assessment_started", eventContext("context"));
+                  setScreen("context");
+                }}
+              >
                 Start the assessment
               </button>
             </div>
@@ -768,6 +803,7 @@ export function AssessmentFlow() {
                 ...lead,
                 phone: lead.phone ?? "",
               });
+              trackAssessmentEvent("contact_gate_completed", eventContext("contact"));
               setScreen("precision");
             }}
           />
@@ -780,18 +816,23 @@ export function AssessmentFlow() {
               setServerResult(null);
               setDeliveryUnavailable(false);
               setApiValidationError(null);
+              trackAssessmentEvent("precision_completed", eventContext("precision"));
               setScreen("processing");
             }}
-            onSkip={() =>
-              continueWithCapacity({ source: "none", activities: [] })
-            }
+            onSkip={() => {
+              trackAssessmentEvent("precision_skipped", eventContext("precision"));
+              continueWithCapacity({ source: "none", activities: [] });
+            }}
             hasEarlierRanges={
               answers.capacity.source === "banded" &&
               result.capacity.estimateType === "directional"
             }
             value={precisionDrafts}
             onChange={setPrecisionDrafts}
-            onComplete={continueWithCapacity}
+            onComplete={(capacity) => {
+              trackAssessmentEvent("precision_completed", eventContext("precision"));
+              continueWithCapacity(capacity);
+            }}
           />
         )}
 
