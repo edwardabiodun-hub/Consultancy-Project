@@ -138,7 +138,15 @@ past results without silently re-scoring them.
   via Resend.
 - `lib/assessment/narrative.ts` / `narrative-validation.ts` — optional
   OpenAI-generated narrative, validated against the deterministic result
-  before use.
+  before use. **Built and fully tested, but not yet wired into the
+  visitor-facing flow**: `app/api/assessment/[id]/narrative/route.ts` exists
+  and works, but nothing in `AssessmentFlow.tsx`/`FullResult.tsx` calls it —
+  the result screen always shows the rules-based narrative today, regardless
+  of whether `OPENAI_API_KEY`/`ASSESSMENT_NARRATIVE_MODEL` are configured.
+  This is a deliberate scope boundary (no task in the implementation plan
+  covers UI wiring for this feature), not a defect. Wiring it in — calling
+  the endpoint from the flow and making `FullResult`'s "Rules-based" label
+  dynamic on `narrative.source` — is a follow-up, not a bug fix.
 
 ### Environment variables
 
