@@ -754,6 +754,24 @@ test("assessment calculation enforces finite values and inclusive minimums", asy
   });
 });
 
+test("report delivery rejects a malformed assessment id", async () => {
+  const response = await request("/api/assessment/not-a-uuid/deliver", {
+    method: "POST",
+  });
+  assert.equal(response.status, 404);
+});
+
+test("report delivery does not claim success when Resend is not configured", async () => {
+  const wellFormedId = "123e4567-e89b-42d3-a456-426614174000";
+  const response = await request(`/api/assessment/${wellFormedId}/deliver`, {
+    method: "POST",
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.match(body.errors.form, /not yet configured/i);
+});
+
 test("assessment responses never reflect submitted lead PII", async (t) => {
   const pii = {
     name: "Private Person",

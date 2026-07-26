@@ -493,6 +493,77 @@ test("full result renders the controlled executive sequence and bounded outputs"
   assert.equal(screen.queryByRole("meter"), null);
 });
 
+test("full result offers an email trigger that reports success, duplicate, and failure feedback", async () => {
+  const user = userEvent.setup();
+  const result = buildAssessmentResult(exactAnswers);
+  let deliverCount = 0;
+
+  const view = render(
+    React.createElement(FullResult, {
+      result,
+      assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159",
+      persistenceAvailable: true,
+      deliveryState: "idle",
+      onDeliverReport: () => {
+        deliverCount += 1;
+      },
+    }),
+  );
+
+  const emailButton = screen.getByRole("button", { name: "Email me this report" });
+  await user.click(emailButton);
+  assert.equal(deliverCount, 1);
+  assert.ok(
+    screen.getByRole("link", { name: "Download executive summary" }),
+    "download link remains available alongside the email trigger",
+  );
+
+  view.rerender(
+    React.createElement(FullResult, {
+      result,
+      assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159",
+      persistenceAvailable: true,
+      deliveryState: "sent",
+      onDeliverReport: () => {},
+    }),
+  );
+  assert.match(view.container.textContent, /your report has been emailed to you/i);
+  assert.equal(
+    screen.getByRole("button", { name: "Email me this report" }).disabled,
+    true,
+  );
+
+  view.rerender(
+    React.createElement(FullResult, {
+      result,
+      assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159",
+      persistenceAvailable: true,
+      deliveryState: "already_sent",
+      onDeliverReport: () => {},
+    }),
+  );
+  assert.match(view.container.textContent, /already emailed to you/i);
+
+  view.rerender(
+    React.createElement(FullResult, {
+      result,
+      assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159",
+      persistenceAvailable: true,
+      deliveryState: "error",
+      onDeliverReport: () => {},
+    }),
+  );
+  assert.match(view.container.textContent, /email delivery is temporarily unavailable/i);
+  assert.ok(
+    screen.getByRole("link", { name: "Download executive summary" }),
+    "download link remains available after an email delivery failure",
+  );
+  assert.equal(
+    screen.getByRole("button", { name: "Email me this report" }).disabled,
+    false,
+  );
+});
+
 test("full result offers browser print when report persistence is unavailable", async () => {
   const user = userEvent.setup();
   const result = buildAssessmentResult(exactAnswers);

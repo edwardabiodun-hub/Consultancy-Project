@@ -1,10 +1,19 @@
 import type { AssessmentResult } from "../../lib/assessment/result";
 import type { ComponentId } from "../../lib/assessment/types";
 
+export type DeliveryState =
+  | "idle"
+  | "sending"
+  | "sent"
+  | "already_sent"
+  | "error";
+
 type FullResultProps = {
   result: AssessmentResult;
   assessmentId?: string;
   persistenceAvailable?: boolean;
+  deliveryState?: DeliveryState;
+  onDeliverReport?: () => void;
 };
 
 const COMPONENT_LABELS: Record<ComponentId, string> = {
@@ -35,6 +44,8 @@ export function FullResult({
   result,
   assessmentId,
   persistenceAvailable = false,
+  deliveryState = "idle",
+  onDeliverReport,
 }: FullResultProps) {
   const components = Object.entries(result.score.components) as [
     ComponentId,
@@ -58,13 +69,42 @@ export function FullResult({
 
       <div className="assessment-report-actions">
         {persistenceAvailable && assessmentId ? (
-          <a
-            className="button"
-            href={`/api/assessment/${encodeURIComponent(assessmentId)}/report`}
-            download
-          >
-            Download executive summary
-          </a>
+          <>
+            <a
+              className="button"
+              href={`/api/assessment/${encodeURIComponent(assessmentId)}/report`}
+              download
+            >
+              Download executive summary
+            </a>
+            {onDeliverReport && (
+              <>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={onDeliverReport}
+                  disabled={
+                    deliveryState === "sending" ||
+                    deliveryState === "sent" ||
+                    deliveryState === "already_sent"
+                  }
+                >
+                  {deliveryState === "sending" ? "Sending…" : "Email me this report"}
+                </button>
+                {deliveryState === "sent" && (
+                  <p role="status">Your report has been emailed to you.</p>
+                )}
+                {deliveryState === "already_sent" && (
+                  <p role="status">Your report was already emailed to you.</p>
+                )}
+                {deliveryState === "error" && (
+                  <p role="alert">
+                    Email delivery is temporarily unavailable. Use the download above instead.
+                  </p>
+                )}
+              </>
+            )}
+          </>
         ) : (
           <>
             <button className="button" type="button" onClick={() => window.print()}>

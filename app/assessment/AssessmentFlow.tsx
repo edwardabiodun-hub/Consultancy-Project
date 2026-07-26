@@ -16,6 +16,7 @@ import { ContactGate } from "./ContactGate";
 import type { LeadDraft } from "./ContactGate";
 import { BandedCapacityInputs } from "./BandedCapacityInputs";
 import { FullResult } from "./FullResult";
+import type { DeliveryState } from "./FullResult";
 import {
   createEmptyPrecisionDrafts,
   PrecisionInputs,
@@ -228,6 +229,8 @@ export function AssessmentFlow() {
   const [deliveryUnavailable, setDeliveryUnavailable] = useState(false);
   const [assessmentId, setAssessmentId] = useState<string | null>(null);
   const [persistenceAvailable, setPersistenceAvailable] = useState(false);
+  const [reportDeliveryState, setReportDeliveryState] =
+    useState<DeliveryState>("idle");
   const [apiValidationError, setApiValidationError] = useState<string | null>(
     null,
   );
@@ -353,6 +356,7 @@ export function AssessmentFlow() {
         setPersistenceAvailable(body.persistenceAvailable === true);
         setDeliveryUnavailable(body.persistenceAvailable !== true);
         setApiValidationError(null);
+        setReportDeliveryState("idle");
         setScreen("full");
       } catch {
         if (!active || controller.signal.aborted) return;
@@ -361,6 +365,7 @@ export function AssessmentFlow() {
         setPersistenceAvailable(false);
         setDeliveryUnavailable(true);
         setApiValidationError(null);
+        setReportDeliveryState("idle");
         setScreen("full");
       }
     };
@@ -371,6 +376,29 @@ export function AssessmentFlow() {
       controller.abort();
     };
   }, [answers, leadDraft, screen]);
+
+  const deliverReport = async () => {
+    if (!assessmentId) return;
+    setReportDeliveryState("sending");
+    try {
+      const response = await fetch(
+        `/api/assessment/${encodeURIComponent(assessmentId)}/deliver`,
+        { method: "POST" },
+      );
+      if (!response.ok) {
+        setReportDeliveryState("error");
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as {
+        status?: string;
+      } | null;
+      setReportDeliveryState(
+        body?.status === "already_sent" ? "already_sent" : "sent",
+      );
+    } catch {
+      setReportDeliveryState("error");
+    }
+  };
 
   const updateContext = <Key extends keyof AssessmentAnswers>(
     key: Key,
@@ -790,6 +818,8 @@ export function AssessmentFlow() {
               result={serverResult ?? result}
               assessmentId={assessmentId ?? undefined}
               persistenceAvailable={persistenceAvailable}
+              deliveryState={reportDeliveryState}
+              onDeliverReport={deliverReport}
             />
           </>
         )}

@@ -123,7 +123,10 @@ const PRIORITIES: Record<
   },
 };
 
-const ROUTES: Record<string, { label: string; path: string; reason: string }> = {
+export const ROUTES: Record<
+  string,
+  { label: string; path: string; reason: string }
+> = {
   diagnostic: {
     label: "Discuss the Business Independence Diagnostic",
     path: "/diagnostic",
@@ -422,7 +425,7 @@ const addPage = (
   return { page, fonts, y: PAGE.height - 78, truncated: false };
 };
 
-const categoryFor = (score: number | null) =>
+export const categoryFor = (score: number | null) =>
   score === null
     ? "Result incomplete"
     : score >= 80
