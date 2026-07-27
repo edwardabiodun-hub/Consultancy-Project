@@ -1,0 +1,1 @@
+ALTER TABLE `assessment_records` ADD `gross_capacity_value` real;

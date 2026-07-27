@@ -1,5 +1,34 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "entries": []
+  "entries": [
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785070142412,
+      "tag": "0001_assessment_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785072938918,
+      "tag": "0002_kind_whiplash",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785075398817,
+      "tag": "0003_nosy_puppet_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785081535428,
+      "tag": "0004_marvelous_red_shift",
+      "breakpoints": true
+    }
+  ]
 }

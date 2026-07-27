@@ -26,6 +26,7 @@ export function DiagnosticCta() {
             Investment is confirmed after a discovery conversation based on organizational complexity,
             stakeholders, and the operating areas being assessed.
           </p>
+          <p><Link className="nav-cta" href="/assessment">Take the assessment</Link></p>
           <Link className="button" href="/diagnostic">Review the assessment →</Link>
         </div>
       </div>
