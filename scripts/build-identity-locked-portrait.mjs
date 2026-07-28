@@ -111,25 +111,15 @@ const subjectBounds = {
   height: Math.min(height - Math.max(0, minY - 24), maxY - minY + 49),
 };
 
-const oversizedSubject = await sharp(rgba, {
+const subject = await sharp(rgba, {
   raw: { width, height, channels: 4 },
 })
   .extract(subjectBounds)
   .resize({
-    width: 2600,
-    height: 1960,
+    width: 1720,
+    height: 1900,
     fit: "inside",
     kernel: sharp.kernel.lanczos3,
-  })
-  .png()
-  .toBuffer({ resolveWithObject: true });
-
-const subject = await sharp(oversizedSubject.data)
-  .extract({
-    left: Math.round((oversizedSubject.info.width - 2048) / 2),
-    top: 0,
-    width: 2048,
-    height: oversizedSubject.info.height,
   })
   .png()
   .toBuffer({ resolveWithObject: true });
@@ -163,7 +153,7 @@ await sharp(backgroundSvg)
   .composite([
     {
       input: subject.data,
-      left: 0,
+      left: Math.round((2048 - subject.info.width) / 2),
       top: Math.max(0, 2048 - subject.info.height),
       blend: "over",
     },
