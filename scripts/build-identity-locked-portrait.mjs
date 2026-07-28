@@ -116,8 +116,8 @@ const subject = await sharp(rgba, {
 })
   .extract(subjectBounds)
   .resize({
-    width: 1720,
-    height: 1900,
+    width: 1850,
+    height: 1960,
     fit: "inside",
     kernel: sharp.kernel.lanczos3,
   })
