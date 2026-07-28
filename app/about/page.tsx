@@ -38,7 +38,10 @@ export default function AboutEddie() {
       <header className="about-hero shell">
         <div className="about-portrait-wrap">
           <div className="about-portrait-frame">
-            <img src="/edward-abiodun.png" alt="Edward Abiodun" />
+            <img
+              src="/edward-abiodun-identity-locked.png"
+              alt="Edward Abiodun"
+            />
           </div>
           <div className="about-profile-note">
             <span>Edward “Eddie” Abiodun</span>
