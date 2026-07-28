@@ -90,13 +90,49 @@ for (let index = 0; index < pixelCount; index += 1) {
   }
 }
 
-const portrait = await sharp(rgba, {
+let minX = width;
+let minY = height;
+let maxX = 0;
+let maxY = 0;
+for (let index = 0; index < pixelCount; index += 1) {
+  if (background[index]) continue;
+  const x = index % width;
+  const y = Math.floor(index / width);
+  minX = Math.min(minX, x);
+  minY = Math.min(minY, y);
+  maxX = Math.max(maxX, x);
+  maxY = Math.max(maxY, y);
+}
+
+const subjectBounds = {
+  left: Math.max(0, minX - 24),
+  top: Math.max(0, minY - 24),
+  width: Math.min(width - Math.max(0, minX - 24), maxX - minX + 49),
+  height: Math.min(height - Math.max(0, minY - 24), maxY - minY + 49),
+};
+
+const oversizedSubject = await sharp(rgba, {
   raw: { width, height, channels: 4 },
 })
-  .resize({ width: 3072, height: 2048, fit: "fill", kernel: sharp.kernel.lanczos3 })
-  .extract({ left: 1024, top: 0, width: 2048, height: 2048 })
+  .extract(subjectBounds)
+  .resize({
+    width: 2600,
+    height: 1960,
+    fit: "inside",
+    kernel: sharp.kernel.lanczos3,
+  })
   .png()
-  .toBuffer();
+  .toBuffer({ resolveWithObject: true });
+
+const subject = await sharp(oversizedSubject.data)
+  .extract({
+    left: Math.round((oversizedSubject.info.width - 2048) / 2),
+    top: 0,
+    width: 2048,
+    height: oversizedSubject.info.height,
+  })
+  .png()
+  .toBuffer({ resolveWithObject: true });
 
 const backgroundSvg = Buffer.from(`
   <svg width="2048" height="2048" viewBox="0 0 2048 2048"
@@ -124,7 +160,14 @@ const backgroundSvg = Buffer.from(`
 `);
 
 await sharp(backgroundSvg)
-  .composite([{ input: portrait, blend: "over" }])
+  .composite([
+    {
+      input: subject.data,
+      left: 0,
+      top: Math.max(0, 2048 - subject.info.height),
+      blend: "over",
+    },
+  ])
   .png({ compressionLevel: 9, adaptiveFiltering: true })
   .toFile(outputPath);
 
