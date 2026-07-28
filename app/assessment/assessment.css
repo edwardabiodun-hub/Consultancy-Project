@@ -5,7 +5,7 @@
 }
 
 .assessment-card {
-  background: var(--paper, #fbfaf6);
+  background: var(--paper, #f7f8f6);
   border: 1px solid rgba(24, 35, 30, 0.14);
   padding: clamp(1.25rem, 4vw, 3rem);
 }
@@ -21,7 +21,7 @@
 }
 
 .assessment-kicker {
-  color: var(--bronze, #9a693a);
+  color: var(--bronze, #536c7f);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.16em;
@@ -31,7 +31,7 @@
 .assessment-lede {
   max-width: 37rem;
   margin-bottom: 1.75rem;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: clamp(1.05rem, 2vw, 1.2rem);
 }
 
@@ -39,14 +39,14 @@
 .assessment-section-note {
   max-width: 38rem;
   margin: 0.65rem 0 1.75rem;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
 }
 
 .assessment-promise {
   margin: 1.75rem 0;
   padding: 1.25rem 1.4rem;
-  border-left: 3px solid var(--bronze, #9a693a);
-  background: var(--stone, #e6e3da);
+  border-left: 3px solid var(--bronze, #536c7f);
+  background: var(--stone, #dce1e2);
 }
 
 .assessment-promise p {
@@ -60,7 +60,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 2rem 0 0;
-  border-top: 1px solid var(--rule, #cbc7bc);
+  border-top: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-notes div {
@@ -69,11 +69,11 @@
 
 .assessment-notes div + div {
   padding-left: 1.25rem;
-  border-left: 1px solid var(--rule, #cbc7bc);
+  border-left: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-notes dt {
-  color: var(--forest, #173f32);
+  color: var(--forest, #23384a);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -82,7 +82,7 @@
 
 .assessment-notes dd {
   margin: 0.4rem 0 0;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.9rem;
 }
 
@@ -95,7 +95,7 @@
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.72rem;
 }
 
@@ -120,7 +120,7 @@
 .assessment-progress > span {
   display: block;
   height: 100%;
-  background: var(--bronze, #9a693a);
+  background: var(--bronze, #536c7f);
   transition: width 180ms ease-out;
 }
 
@@ -137,7 +137,7 @@
 
 .assessment-field label,
 .assessment-compact-fieldset legend {
-  color: var(--ink, #18231e);
+  color: var(--ink, #172733);
   font-size: 0.88rem;
   font-weight: 700;
 }
@@ -149,8 +149,8 @@
   padding: 0.7rem 0.8rem;
   border: 1px solid rgba(24, 35, 30, 0.36);
   border-radius: 0;
-  background: var(--paper, #fbfaf6);
-  color: var(--ink, #18231e);
+  background: var(--paper, #f7f8f6);
+  color: var(--ink, #172733);
   font: inherit;
 }
 
@@ -162,7 +162,7 @@
 .assessment-field select:focus-visible,
 .assessment-back:focus-visible,
 .assessment-route .button:focus-visible {
-  outline: 3px solid var(--bronze, #9a693a);
+  outline: 3px solid var(--bronze, #536c7f);
   outline-offset: 3px;
 }
 
@@ -176,12 +176,12 @@
 
 .assessment-compact-fieldset {
   padding-top: 1.25rem;
-  border-top: 1px solid var(--rule, #cbc7bc);
+  border-top: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-compact-fieldset p {
   margin: 0.35rem 0 0.8rem;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.85rem;
 }
 
@@ -207,7 +207,7 @@
 }
 
 .assessment-inline-options label:has(input:checked) {
-  border-color: var(--forest, #173f32);
+  border-color: var(--forest, #23384a);
   background: rgba(23, 63, 50, 0.06);
 }
 
@@ -217,7 +217,7 @@
   width: 1.05rem;
   height: 1.05rem;
   margin: 0.18rem 0 0;
-  accent-color: var(--forest, #173f32);
+  accent-color: var(--forest, #23384a);
 }
 
 .assessment-disclosures {
@@ -225,16 +225,16 @@
   gap: 0.8rem;
   margin-top: 1.75rem;
   padding: 1.15rem;
-  border: 1px solid var(--rule, #cbc7bc);
-  background: var(--canvas, #f5f4ef);
+  border: 1px solid var(--rule, #c7ced1);
+  background: var(--canvas, #edefec);
   font-size: 0.88rem;
 }
 
 .assessment-disclosures p {
   margin: 0;
   padding-top: 0.8rem;
-  border-top: 1px solid var(--rule, #cbc7bc);
-  color: var(--muted, #5f6861);
+  border-top: 1px solid var(--rule, #c7ced1);
+  color: var(--muted, #586773);
 }
 
 .assessment-question {
@@ -269,14 +269,14 @@
 }
 
 .assessment-option:has(input:checked) {
-  border-color: var(--forest, #173f32);
+  border-color: var(--forest, #23384a);
   background: rgba(23, 63, 50, 0.06);
 }
 
 .assessment-option:has(input:focus-visible),
 .assessment-inline-options label:has(input:focus-visible),
 .assessment-disclosures label:has(input:focus-visible) {
-  outline: 3px solid var(--bronze, #9a693a);
+  outline: 3px solid var(--bronze, #536c7f);
   outline-offset: 3px;
 }
 
@@ -286,7 +286,7 @@
   gap: 1rem;
   margin-top: 2rem;
   padding-top: 1.25rem;
-  border-top: 1px solid var(--rule, #cbc7bc);
+  border-top: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-actions-split {
@@ -300,9 +300,9 @@
 }
 
 .assessment-actions .button:disabled {
-  border-color: var(--rule, #cbc7bc);
-  background: var(--stone, #e6e3da);
-  color: var(--muted, #5f6861);
+  border-color: var(--rule, #c7ced1);
+  background: var(--stone, #dce1e2);
+  color: var(--muted, #586773);
   cursor: not-allowed;
 }
 
@@ -310,16 +310,16 @@
   min-height: 2.75rem;
   padding: 0;
   border: 0;
-  border-bottom: 1px solid var(--forest, #173f32);
+  border-bottom: 1px solid var(--forest, #23384a);
   background: transparent;
-  color: var(--forest, #173f32);
+  color: var(--forest, #23384a);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
 }
 
 .assessment-next-note {
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.8rem;
 }
 
@@ -332,8 +332,8 @@
 
 .assessment-result-meta span {
   padding: 0.45rem 0.65rem;
-  border: 1px solid var(--rule, #cbc7bc);
-  color: var(--forest, #173f32);
+  border: 1px solid var(--rule, #c7ced1);
+  color: var(--forest, #23384a);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -343,7 +343,7 @@
 .assessment-result-section {
   margin-top: 2.25rem;
   padding-top: 1.5rem;
-  border-top: 1px solid var(--rule, #cbc7bc);
+  border-top: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-result-section h2 {
@@ -355,12 +355,12 @@
 }
 
 .assessment-result-section p {
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
 }
 
 .assessment-section-label,
 .assessment-code {
-  color: var(--bronze, #9a693a);
+  color: var(--bronze, #536c7f);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -386,8 +386,8 @@
 
 .assessment-risk-list li {
   padding: 0.65rem 0.8rem;
-  border-left: 3px solid var(--bronze, #9a693a);
-  background: var(--canvas, #f5f4ef);
+  border-left: 3px solid var(--bronze, #536c7f);
+  background: var(--canvas, #edefec);
   font-weight: 700;
 }
 
@@ -395,7 +395,7 @@
   margin: 1.5rem 0 0;
   padding: 1rem 1.1rem;
   border: 1px solid rgba(24, 35, 30, 0.16);
-  color: var(--forest, #173f32);
+  color: var(--forest, #23384a);
 }
 
 .assessment-lock-grid {
@@ -409,11 +409,11 @@
   gap: 0.25rem;
   padding: 0.9rem;
   border: 1px solid rgba(24, 35, 30, 0.14);
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
 }
 
 .assessment-lock-grid li span {
-  color: var(--bronze, #9a693a);
+  color: var(--bronze, #536c7f);
   font-size: 0.65rem;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -424,12 +424,12 @@
   min-width: 0;
   margin: 1.4rem 0 0;
   padding: 1.15rem;
-  border: 1px solid var(--rule, #cbc7bc);
+  border: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-precision-group legend {
   padding: 0 0.45rem;
-  color: var(--forest, #173f32);
+  color: var(--forest, #23384a);
   font-family: Georgia, "Times New Roman", serif;
   font-size: 1.25rem;
 }
@@ -444,13 +444,13 @@
 .assessment-validation {
   margin: 1rem 0 0;
   padding: 0.8rem;
-  background: var(--canvas, #f5f4ef);
-  color: var(--muted, #5f6861);
+  background: var(--canvas, #edefec);
+  color: var(--muted, #586773);
   font-size: 0.82rem;
 }
 
 .assessment-validation {
-  border-left: 3px solid var(--bronze, #9a693a);
+  border-left: 3px solid var(--bronze, #536c7f);
 }
 
 .assessment-field-error {
@@ -469,11 +469,11 @@
 .assessment-banded {
   margin-top: 1.4rem;
   padding-top: 1.2rem;
-  border-top: 1px solid var(--rule, #cbc7bc);
+  border-top: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-finding-kind {
-  color: var(--bronze, #9a693a);
+  color: var(--bronze, #536c7f);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -506,20 +506,20 @@
 }
 
 .assessment-component-list li span {
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.8rem;
 }
 
 .assessment-score-bar {
   height: 0.55rem;
   overflow: hidden;
-  background: var(--stone, #e6e3da);
+  background: var(--stone, #dce1e2);
 }
 
 .assessment-score-bar span {
   display: block;
   height: 100%;
-  background: var(--forest, #173f32);
+  background: var(--forest, #23384a);
 }
 
 .assessment-evidence-list,
@@ -555,7 +555,7 @@
   position: absolute;
   top: 1rem;
   left: 0;
-  color: var(--bronze, #9a693a);
+  color: var(--bronze, #536c7f);
   content: counter(result-item, decimal-leading-zero);
   font-size: 0.72rem;
   font-weight: 800;
@@ -563,7 +563,7 @@
 }
 
 .assessment-priority-list span {
-  color: var(--forest, #173f32);
+  color: var(--forest, #23384a);
   font-size: 0.82rem;
   font-weight: 700;
 }
@@ -579,8 +579,8 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 1.25rem 0;
-  border-top: 1px solid var(--rule, #cbc7bc);
-  border-bottom: 1px solid var(--rule, #cbc7bc);
+  border-top: 1px solid var(--rule, #c7ced1);
+  border-bottom: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-capacity-grid div {
@@ -588,12 +588,12 @@
 }
 
 .assessment-capacity-grid div + div {
-  border-left: 1px solid var(--rule, #cbc7bc);
+  border-left: 1px solid var(--rule, #c7ced1);
 }
 
 .assessment-capacity-grid dt {
   min-height: 2.4em;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -601,7 +601,7 @@
 
 .assessment-capacity-grid dd {
   margin: 0.35rem 0 0;
-  color: var(--forest, #173f32);
+  color: var(--forest, #23384a);
   font-family: Georgia, "Times New Roman", serif;
   font-size: 1.35rem;
 }
@@ -609,7 +609,7 @@
 .assessment-assumption-list {
   display: grid;
   gap: 0.45rem;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.82rem;
 }
 
@@ -619,7 +619,7 @@
 
 .assessment-assumption-list li::before {
   margin-left: -1rem;
-  color: var(--bronze, #9a693a);
+  color: var(--bronze, #536c7f);
   content: "—";
 }
 
@@ -644,7 +644,7 @@
 .assessment-report-actions p {
   max-width: 30rem;
   margin: 0;
-  color: var(--muted, #5f6861);
+  color: var(--muted, #586773);
   font-size: 0.82rem;
 }
 
@@ -691,7 +691,7 @@
   }
 
   .assessment-capacity-grid div + div {
-    border-top: 1px solid var(--rule, #cbc7bc);
+    border-top: 1px solid var(--rule, #c7ced1);
     border-left: 0;
   }
 }

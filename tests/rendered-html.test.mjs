@@ -76,6 +76,17 @@ test("renders the founder-independence homepage and six-page navigation", async 
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
+test("renders the accessible RunRate Advisory identity in the shared site chrome", async () => {
+  const response = await request("/");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /src="\/brand\/runrate-icon\.svg"/);
+  assert.match(html, />RUNRATE</);
+  assert.match(html, />ADVISORY</);
+  assert.match(html, /aria-label="RunRate Advisory home"/);
+  assert.doesNotMatch(html, /EA Advisory|Edward Abiodun Advisory/);
+});
+
 test("renders every primary route with unique substantive content", async () => {
   const routes = new Map([
     ["/diagnostic", /10 business days/],
@@ -96,7 +107,7 @@ test("renders the human-led About Eddie page with professional proof", async () 
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Clearer decisions\. Stronger operating systems\. Less dependence on one person\./);
-  assert.match(html, /src="\/edward-abiodun\.png"/);
+  assert.match(html, /src="\/edward-abiodun-identity-locked\.png"/);
   assert.match(html, /alt="Edward Abiodun"/);
   assert.match(html, /linkedin\.com\/in\/edward-abiodun-09600a10/);
   assert.match(html, /Christoph Brand/);

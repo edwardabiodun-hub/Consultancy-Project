@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <style>
+    .bar{ fill:#23384A; }
+    .diag{ stroke:#D98E2E; }
+    @media (prefers-color-scheme: dark){
+      .bar{ fill:#E7E9E6; }
+      .diag{ stroke:#F0A84A; }
+    }
+  </style>
+  <rect class="bar" x="26" y="58" width="22" height="44" rx="5"/>
+  <rect class="bar" x="68" y="24" width="22" height="78" rx="5"/>
+  <line class="diag" x1="37" y1="58" x2="79" y2="24" stroke-width="5" stroke-linecap="round"/>
+</svg>

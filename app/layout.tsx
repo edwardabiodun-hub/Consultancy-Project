@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
+import { Space_Grotesk } from "next/font/google";
 import Link from "next/link";
+import { Logo } from "../components/Logo";
 import "./globals.css";
 
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+  weight: ["500", "700"],
+});
+
 export const metadata: Metadata = {
-  title: { default: "Edward Abiodun | Business Independence Advisory", template: "%s | Edward Abiodun" },
+  title: {
+    default: "RunRate Advisory | Business Independence & Decision Systems",
+    template: "%s | RunRate Advisory",
+  },
   description:
     "Helping owner-led businesses reduce founder dependency, improve executive decisions, and remove recurring operational friction.",
-  icons: { icon: "/favicon.svg" },
   openGraph: { images: ["/og.png"], type: "website" },
   twitter: { card: "summary_large_image", images: ["/og.png"] },
 };
@@ -23,9 +33,9 @@ const nav = [
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
+      <body className={spaceGrotesk.variable}>
         <header className="site-header">
-          <Link className="brand" href="/"><span>◆</span> EA Advisory</Link>
+          <Logo />
           <nav aria-label="Primary navigation">
             {nav.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
             <Link className="nav-cta" href="/contact">Start a Conversation</Link>
@@ -34,7 +44,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <main>{children}</main>
         <footer>
           <div>
-            <strong>Edward Abiodun Advisory</strong>
+            <strong className="footer-brand">RunRate Advisory</strong>
             <p>Business independence through executive visibility, operating systems, and practical automation.</p>
           </div>
           <div className="footer-links">
