@@ -197,11 +197,17 @@ test.describe("Business Independence Assessment — accessibility", () => {
     ).toBeVisible();
   });
 
-  /** Computes real WCAG contrast ratios, from live computed styles, for
-   * whichever of the given CSS selectors currently match an element on the
-   * page. Shared across screens so the same large-text/normal-text
-   * thresholds and background-resolution logic apply consistently. */
+  /** Computes real WCAG contrast ratios from live computed styles. Every
+   * requested selector is required to resolve so coverage cannot disappear
+   * silently when markup changes. */
   async function contrastPairsFor(page: Page, selectors: string[]) {
+    for (const selector of selectors) {
+      expect(
+        await page.locator(selector).count(),
+        `contrast target must resolve: ${selector}`,
+      ).toBeGreaterThan(0);
+    }
+
     return page.evaluate((selectorList: string[]) => {
       const parse = (color: string): [number, number, number] => {
         const match = color.match(/rgba?\(([^)]+)\)/);
@@ -233,16 +239,21 @@ test.describe("Business Independence Assessment — accessibility", () => {
         return getComputedStyle(document.body).backgroundColor;
       };
 
-      const targets = selectorList
-        .map((selector) => document.querySelector(selector))
-        .filter((element): element is Element => element !== null);
+      const targets = selectorList.map((selector) => {
+        const element = document.querySelector(selector);
+        if (!element) {
+          throw new Error(`Missing contrast target: ${selector}`);
+        }
+        return { element, selector };
+      });
 
-      return targets.map((element) => {
+      return targets.map(({ element, selector }) => {
         const style = getComputedStyle(element);
         const background =
           element.tagName === "BUTTON" ? style.backgroundColor : backgroundOf(element);
         return {
-          selector: element.tagName + (element.className ? `.${element.className}` : ""),
+          selector,
+          element: element.tagName + (element.className ? `.${element.className}` : ""),
           foreground: style.color,
           background,
           ratio: contrastOf(style.color, background),
@@ -252,18 +263,23 @@ test.describe("Business Independence Assessment — accessibility", () => {
   }
 
   function assertAA(
-    pairs: Array<{ selector: string; foreground: string; background: string; ratio: number }>,
+    pairs: Array<{
+      selector: string;
+      element: string;
+      foreground: string;
+      background: string;
+      ratio: number;
+    }>,
   ) {
-    expect(pairs.length).toBeGreaterThan(0);
     for (const pair of pairs) {
       // WCAG AA: 4.5:1 for normal text, 3:1 for large-scale text (headings,
       // button labels at this size). Use the stricter 4.5 threshold except
       // for the h1, which is unambiguously "large text" under WCAG's
       // 18pt/14pt-bold definition.
-      const threshold = pair.selector.startsWith("H1") ? 3 : 4.5;
+      const threshold = pair.element.startsWith("H1") ? 3 : 4.5;
       expect(
         pair.ratio,
-        `${pair.selector}: ${pair.foreground} on ${pair.background} = ${pair.ratio.toFixed(2)}:1`,
+        `${pair.selector} (${pair.element}): ${pair.foreground} on ${pair.background} = ${pair.ratio.toFixed(2)}:1`,
       ).toBeGreaterThanOrEqual(threshold);
     }
   }
@@ -369,6 +385,39 @@ test.describe("Business Independence Assessment — accessibility", () => {
     expect(await overflowOf()).toBeLessThanOrEqual(1);
   });
 
+  test("keeps the complete primary journey visible without mobile overflow", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/");
+
+    const primaryNav = page.getByRole("navigation", {
+      name: "Primary navigation",
+    });
+    for (const name of [
+      "Reduce Owner Dependency",
+      "Improve Executive Decisions",
+      "Automate Manual Operations",
+      "Insights",
+      "About Eddie",
+      "Take the assessment",
+      "Start a Conversation",
+    ]) {
+      await expect(primaryNav.getByRole("link", { name, exact: true })).toBeVisible();
+    }
+
+    await expect(
+      page
+        .locator(".diagnostic-band")
+        .getByRole("link", { name: "Take the assessment", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+  });
+
   test("shows a visible focus indicator on keyboard-focused controls", async ({ page }) => {
     const outlineOf = (locator: ReturnType<Page["locator"]>) =>
       locator.evaluate((element) => {
@@ -397,5 +446,84 @@ test.describe("Business Independence Assessment — accessibility", () => {
     const radioOutline = await outlineOf(firstOptionLabel);
     expect(radioOutline.outlineStyle).not.toBe("none");
     expect(parseFloat(radioOutline.outlineWidth)).toBeGreaterThan(0);
+  });
+
+  test("uses a 3:1 focus indicator on dark surfaces", async ({ page }) => {
+    const focusContrastOf = (locator: ReturnType<Page["locator"]>) =>
+      locator.evaluate((element) => {
+        const parse = (color: string): [number, number, number] => {
+          const match = color.match(/rgba?\(([^)]+)\)/);
+          if (!match) return [0, 0, 0];
+          const [r, g, b] = match[1].split(",").map((part) => parseFloat(part));
+          return [r, g, b];
+        };
+        const luminance = ([r, g, b]: [number, number, number]) => {
+          const channel = (value: number) => {
+            const c = value / 255;
+            return c <= 0.03928
+              ? c / 12.92
+              : Math.pow((c + 0.055) / 1.055, 2.4);
+          };
+          return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+        };
+        const contrastOf = (foreground: string, background: string) => {
+          const l1 = luminance(parse(foreground)) + 0.05;
+          const l2 = luminance(parse(background)) + 0.05;
+          return l1 > l2 ? l1 / l2 : l2 / l1;
+        };
+        const backgroundOf = (target: Element): string => {
+          let node: Element | null = target;
+          while (node) {
+            const color = getComputedStyle(node).backgroundColor;
+            if (
+              color &&
+              color !== "rgba(0, 0, 0, 0)" &&
+              color !== "transparent"
+            ) {
+              return color;
+            }
+            node = node.parentElement;
+          }
+          return getComputedStyle(document.body).backgroundColor;
+        };
+
+        const style = getComputedStyle(element);
+        const adjacentBackground = backgroundOf(element.parentElement ?? element);
+        return {
+          outlineColor: style.outlineColor,
+          adjacentBackground,
+          ratio: contrastOf(style.outlineColor, adjacentBackground),
+        };
+      });
+
+    const assertFocusContrast = async (
+      locator: ReturnType<Page["locator"]>,
+      label: string,
+    ) => {
+      await expect(locator, `${label} must resolve`).toHaveCount(1);
+      await locator.focus();
+      const contrast = await focusContrastOf(locator);
+      expect(
+        contrast.ratio,
+        `${label}: ${contrast.outlineColor} on ${contrast.adjacentBackground} = ${contrast.ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(3);
+    };
+
+    await page.goto("/founder-resources");
+    await assertFocusContrast(
+      page.locator(".callout .button.secondary"),
+      "scorecard callout download",
+    );
+
+    await assertFocusContrast(
+      page.locator("footer").getByRole("link", { name: "Privacy" }),
+      "footer privacy link",
+    );
+
+    await page.goto("/about");
+    await assertFocusContrast(
+      page.locator(".about-proof .about-linkedin"),
+      "About proof link",
+    );
   });
 });

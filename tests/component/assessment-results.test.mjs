@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import "./setup.mjs";
 
@@ -57,6 +58,21 @@ test.afterEach(() => {
 });
 
 test("landing sample remains illustrative and read-only", () => {
+  const source = readFileSync(
+    new URL("../../app/assessment/AssessmentSampleResult.tsx", import.meta.url),
+    "utf8",
+  );
+  for (const [boundary, pattern] of [
+    ["buttons or links", /<(?:button|a|Link)\b/],
+    ["event handlers", /(?:\bon[A-Z][A-Za-z]*\s*=|\baddEventListener\s*\()/],
+    ["fetch calls", /\bfetch\s*\(/],
+    ["browser storage", /\b(?:localStorage|sessionStorage)\b/],
+    ["imports or require calls", /(?:^\s*import\s|\bimport\s*\(|\brequire\s*\()/m],
+    ["API dependencies", /(?:\/api\/|app\/api|lib\/api)/i],
+  ]) {
+    assert.doesNotMatch(source, pattern, `sample must not contain ${boundary}`);
+  }
+
   render(React.createElement(AssessmentSampleResult));
 
   const sample = screen.getByRole("region", {
@@ -71,6 +87,8 @@ test("landing sample remains illustrative and read-only", () => {
   assert.equal(sample.querySelector("input"), null);
   assert.equal(sample.querySelector('input[type="email"]'), null);
   assert.equal(sample.querySelector('[type="submit"]'), null);
+  assert.equal(sample.querySelector("button"), null);
+  assert.equal(sample.querySelector("a[href]"), null);
 });
 
 test("preliminary result provides evidence without exposing monetary capacity", async () => {
