@@ -312,6 +312,20 @@ test.describe("Business Independence Assessment — accessibility", () => {
     );
   });
 
+  test("meets WCAG AA contrast on dark surfaces", async ({ page }) => {
+    await page.goto("/founder-resources");
+    assertAA(
+      await contrastPairsFor(page, [
+        ".callout .eyebrow",
+        ".callout p",
+        ".callout .button.secondary",
+      ]),
+    );
+
+    await page.goto("/");
+    assertAA(await contrastPairsFor(page, [".recognition .eyebrow", ".recognition p"]));
+  });
+
   test("respects prefers-reduced-motion", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/assessment");
