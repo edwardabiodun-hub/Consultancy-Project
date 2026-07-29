@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import "./setup.mjs";
 
@@ -8,6 +9,10 @@ const { default: userEvent } = await import("@testing-library/user-event");
 const { AssessmentFlow } = await import("../../app/assessment/AssessmentFlow.tsx");
 const { buildAssessmentResult } = await import("../../lib/assessment/result.ts");
 const { SESSION_KEY } = await import("../../lib/assessment/session.ts");
+const assessmentFlowSource = await readFile(
+  new URL("../../app/assessment/AssessmentFlow.tsx", import.meta.url),
+  "utf8",
+);
 
 const validStoredAnswers = {
   employeeBand: "20-49",
@@ -772,6 +777,16 @@ test("a fresh assessment aborts the prior narrative and rejects its stale resolu
   assert.ok(screen.getByText("Interpretation for the fresh assessment."));
   assert.equal(calculationRequests, 2);
   assert.equal(narrativeRequests, 2);
+});
+test("both mounted calculation-entry handlers reset narrative state before processing", () => {
+  assert.match(
+    assessmentFlowSource,
+    /const continueWithCapacity = \(capacity: CapacityInputs\) => \{[\s\S]*?resetNarrativeState\(\);[\s\S]*?setScreen\("processing"\);[\s\S]*?\};/,
+  );
+  assert.match(
+    assessmentFlowSource,
+    /onUseEarlierRanges=\{\(\) => \{[\s\S]*?resetNarrativeState\(\);[\s\S]*?setScreen\("processing"\);[\s\S]*?\}\}/,
+  );
 });
 test("unpersisted or unidentified results do not request narratives", async () => {
   for (const calculationResponse of [
