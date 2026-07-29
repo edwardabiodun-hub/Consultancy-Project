@@ -22,12 +22,12 @@ export const metadata: Metadata = {
 };
 
 const nav = [
-  ["/assessment", "Take the assessment"],
-  ["/diagnostic", "Reduce Owner Dependency"],
-  ["/how-i-help", "Improve Executive Decisions"],
+  ["/how-i-help#dependency", "Reduce Owner Dependency"],
+  ["/how-i-help#decisions", "Improve Executive Decisions"],
   ["/how-i-help#automation", "Automate Manual Operations"],
   ["/founder-resources", "Insights"],
   ["/about", "About Eddie"],
+  ["/assessment", "Take the assessment"],
 ] as const;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

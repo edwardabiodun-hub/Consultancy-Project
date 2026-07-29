@@ -66,7 +66,7 @@ test("renders the founder-independence homepage and six-page navigation", async 
   assert.match(html, /Decision Margin/);
   for (const href of [
     "/diagnostic",
-    "/how-i-help",
+    "/how-i-help#dependency",
     "/founder-resources",
     "/about",
     "/contact",
@@ -86,6 +86,31 @@ test("renders the accessible RunRate Advisory identity in the shared site chrome
   assert.match(html, />ADVISORY</);
   assert.match(html, /aria-label="RunRate Advisory home"/);
   assert.doesNotMatch(html, /EA Advisory|Edward Abiodun Advisory/);
+});
+
+test("orders shared header navigation around education before assessment", async () => {
+  const response = await request("/");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  const header = html.match(/<header[\s\S]*?<\/header>/)?.[0];
+  assert.ok(header);
+
+  const labels = [
+    "Reduce Owner Dependency",
+    "Improve Executive Decisions",
+    "Automate Manual Operations",
+    "Insights",
+    "About Eddie",
+    "Take the assessment",
+    "Start a Conversation",
+  ];
+  const positions = labels.map((label) => header.indexOf(label));
+  assert.ok(positions.every((position) => position >= 0));
+  assert.deepEqual([...positions].sort((left, right) => left - right), positions);
+
+  assert.match(html, /href="\/how-i-help#dependency"[^>]*>Reduce Owner Dependency/);
+  assert.match(html, /href="\/how-i-help#decisions"[^>]*>Improve Executive Decisions/);
+  assert.match(html, /href="\/how-i-help#automation"[^>]*>Automate Manual Operations/);
 });
 
 test("renders every primary route with unique substantive content", async () => {
