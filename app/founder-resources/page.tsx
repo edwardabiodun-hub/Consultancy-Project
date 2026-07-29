@@ -11,7 +11,7 @@ export default function Insights() {
   return (
     <>
       <PageHero eyebrow="Insights" title="Practical thinking for a business that can run without you.">
-        Organized around the executive problem you are trying to solve—not publication date or content format.
+        Organized around the executive problem you are trying to solve, not publication date or content format.
       </PageHero>
       <div className="shell callout">
         <div className="eyebrow">Free scorecard</div>

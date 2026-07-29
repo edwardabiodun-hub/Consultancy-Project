@@ -64,7 +64,7 @@ export function BandedCapacityInputs({
       <p>
         Select only ranges that reflect your current experience. Calculations
         use the midpoint of each selected self-reported band as a disclosed
-        derived assumption—not an external benchmark.
+        derived assumption, not an external benchmark.
       </p>
       <div className="assessment-context-grid">
         {(

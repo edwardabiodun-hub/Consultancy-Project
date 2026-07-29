@@ -42,7 +42,7 @@ export default function Home() {
         <aside className="decision-margin" aria-label="Decision Margin">
           <div className="vertical">Decision Margin</div>
           <h3>What changes</h3>
-          <p>Decisions move with the business—not automatically back to the founder.</p>
+          <p>Decisions move with the business instead of automatically returning to the founder.</p>
           <h3>What remains</h3>
           <p>Your judgment, focused where it creates the most value.</p>
         </aside>
@@ -60,7 +60,7 @@ export default function Home() {
       <section className="section shell">
         <div className="section-head">
           <div><div className="eyebrow">Three business outcomes</div><h2>Make independence practical.</h2></div>
-          <p>Start with the operating constraint—not a dashboard, automation, or AI tool.</p>
+          <p>Start with the operating constraint, not a dashboard, automation, or AI tool.</p>
         </div>
         <div className="lever-grid">
           <div className="lever"><h3>Reduce owner dependency</h3><p>Expose the decisions, knowledge, relationships, and work that still require owner intervention.</p></div>
@@ -73,7 +73,7 @@ export default function Home() {
         <div className="shell">
           <div className="section-head">
             <div><div className="eyebrow">How engagements evolve</div><h2>A clear starting point with room to continue.</h2></div>
-            <p>Build and Sustain are continuation paths—not automatic next purchases—and are available only when the Diagnostic findings justify further work.</p>
+            <p>Build and Sustain are continuation paths, not automatic next purchases. They are available only when the Diagnostic findings justify further work.</p>
           </div>
           <div className="journey-grid">
             {journey.map((item, index) => (

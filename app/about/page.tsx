@@ -15,18 +15,18 @@ const capabilities = [
   {
     label: "Commercial clarity",
     title: "See demand and the market more clearly.",
-    copy: "Forecasting, S&OP, and market intelligence become useful when they align commercial assumptions and help leaders decide where to focus.",
+    copy: "Forecasting, S&OP, and market intelligence become useful when they connect commercial assumptions and help leaders decide where to focus.",
     details: "Demand planning · Forecasting and S&OP · Market and competitive intelligence",
   },
   {
     label: "Executive visibility",
     title: "Turn reporting into a management instrument.",
-    copy: "KPI frameworks and executive reporting should expose the few conditions that require judgment—not create another layer of information to interpret.",
+    copy: "KPI frameworks and executive reporting should expose the few conditions that require judgment. They should not create another layer of information to interpret.",
     details: "KPI frameworks · Executive reporting · Decision-ready synthesis",
   },
   {
     label: "Scalable execution",
-    title: "Build leverage into recurring work.",
+    title: "Make recurring work easier to scale.",
     copy: "Practical process design, automation, and AI can remove recurring friction once the decision, owner, and operating constraint are understood.",
     details: "Process design · Automation · AI-enabled decision systems",
   },

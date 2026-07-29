@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     body: JSON.stringify({
       from,
       to: [to],
-      subject: `Business Independence Diagnostic inquiry — ${escapeHtml(body.company)}`,
+      subject: `Business Independence Diagnostic inquiry: ${escapeHtml(body.company)}`,
       html: required.map((field) => `<p><strong>${field}</strong>: ${escapeHtml(body[field])}</p>`).join(""),
     }),
   });

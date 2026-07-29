@@ -50,7 +50,7 @@ export default function HowIHelp() {
         ))}
         <div className="callout">
           <div className="eyebrow">Role of AI</div>
-          <h2>AI is an enabling mechanism—not the positioning.</h2>
+          <h2>AI supports the work. It is not the positioning.</h2>
           <p>
             It is introduced only after the decision, owner, workflow, and expected operating improvement
             are clear.

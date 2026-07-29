@@ -22,7 +22,7 @@ export default function Diagnostic() {
         title="In two weeks, identify where your business still depends on you."
       >
         Estimate the operational cost of that dependency and leave with a prioritized plan for reducing
-        owner involvement—without beginning with a software or AI recommendation.
+        owner involvement. The work does not begin with a software or AI recommendation.
       </PageHero>
 
       <div className="content shell">
@@ -31,7 +31,7 @@ export default function Diagnostic() {
           <h2>10 business days · dependency and cost assessment · prioritized 90-day plan</h2>
           <p>
             One clearly bounded engagement designed to establish what is happening, why it matters, and
-            where management attention will create the greatest leverage.
+            where management attention will have the greatest impact.
           </p>
         </div>
 
@@ -105,7 +105,7 @@ export default function Diagnostic() {
 
         <div className="investment">
           <div className="eyebrow">Investment</div>
-          <h2>Scoped to the operating complexity—not a public price anchor.</h2>
+          <h2>Scoped to the operating complexity, not a public price anchor.</h2>
           <p>
             Investment is confirmed after an initial discovery conversation based on organizational
             complexity, the number of stakeholders, and the operating areas being assessed.

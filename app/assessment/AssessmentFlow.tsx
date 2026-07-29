@@ -542,7 +542,7 @@ export function AssessmentFlow() {
               <div>
                 <dt>Method</dt>
                 <dd>
-                  Deterministic scoring based on observable operating behaviors—not a personality
+                  Deterministic scoring based on observable operating behaviors, not a personality
                   profile or an AI-generated judgment.
                 </dd>
               </div>
