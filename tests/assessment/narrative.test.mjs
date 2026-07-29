@@ -700,3 +700,126 @@ test("narrative route reports persistenceAvailable=false without failing the req
   assert.equal(body.persistenceAvailable, false);
   assert.deepEqual(body.narrative, { source: "rules", text: "Rules narrative." });
 });
+
+test("narrative route sends only approved data to the internal notification after persistence", async () => {
+  let notificationInput = null;
+  let persisted = false;
+  const expectedServerResult = buildAssessmentResult(validPayload.answers);
+  const handler = createAssessmentNarrativeHandler({
+    generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
+    updateNarrativeSource: async () => {
+      persisted = true;
+    },
+    sendInternalNotification: async (input) => {
+      assert.equal(persisted, true, "notification must follow the best-effort source update");
+      notificationInput = input;
+      return { accepted: true };
+    },
+  });
+
+  const response = await handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(notificationInput, {
+    assessmentId,
+    lead: {
+      name: validPayload.lead.name,
+      email: validPayload.lead.workEmail,
+      company: validPayload.lead.company,
+      role: validPayload.answers.role,
+    },
+    result: expectedServerResult,
+    narrative: { source: "ai", text: "An AI narrative." },
+  });
+  assert.equal("phone" in notificationInput, false);
+  assert.equal("reportConsent" in notificationInput, false);
+  assert.equal("marketingConsent" in notificationInput, false);
+  assert.equal("scored" in notificationInput, false);
+  assert.equal("freeText" in notificationInput, false);
+  assert.deepEqual(body, {
+    ok: true,
+    narrative: { source: "ai", text: "An AI narrative." },
+    persistenceAvailable: true,
+    internalNotificationAccepted: true,
+  });
+});
+
+test("narrative route returns the accepted narrative when internal notification declines it", async () => {
+  const handler = createAssessmentNarrativeHandler({
+    generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
+    updateNarrativeSource: async () => {},
+    sendInternalNotification: async () => ({ accepted: false }),
+  });
+
+  const response = await handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.narrative, { source: "ai", text: "An AI narrative." });
+  assert.equal(body.internalNotificationAccepted, false);
+});
+
+test("narrative route converts an unexpected internal notification error to an unaccepted notification", async () => {
+  const handler = createAssessmentNarrativeHandler({
+    generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
+    updateNarrativeSource: async () => {},
+    sendInternalNotification: async () => {
+      throw new Error("Resend unavailable");
+    },
+  });
+
+  const response = await handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.narrative, { source: "ai", text: "An AI narrative." });
+  assert.equal(body.internalNotificationAccepted, false);
+});
+
+test("narrative route sends a clearly labeled rules fallback to internal notification", async () => {
+  let notificationInput = null;
+  const handler = createAssessmentNarrativeHandler({
+    generateNarrative: async () => ({ source: "rules", text: "Rules narrative." }),
+    updateNarrativeSource: async () => {},
+    sendInternalNotification: async (input) => {
+      notificationInput = input;
+      return { accepted: true };
+    },
+  });
+
+  const response = await handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  const body = await response.json();
+
+  assert.deepEqual(notificationInput.narrative, { source: "rules", text: "Rules narrative." });
+  assert.equal(body.internalNotificationAccepted, true);
+});
+
+test("narrative route uses the same assessment id for each internal notification retry", async () => {
+  const notifiedIds = [];
+  const handler = createAssessmentNarrativeHandler({
+    generateNarrative: async () => ({ source: "rules", text: "Rules narrative." }),
+    updateNarrativeSource: async () => {},
+    sendInternalNotification: async ({ assessmentId: id }) => {
+      notifiedIds.push(id);
+      return { accepted: true };
+    },
+  });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await handler(narrativeRequest(assessmentId, validPayload), {
+      params: Promise.resolve({ id: assessmentId }),
+    });
+    assert.equal(response.status, 200);
+  }
+
+  assert.deepEqual(notifiedIds, [assessmentId, assessmentId]);
+});

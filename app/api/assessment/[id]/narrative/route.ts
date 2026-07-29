@@ -6,6 +6,7 @@ import {
   generateValidatedNarrative,
   type NarrativeOutcome,
 } from "../../../../../lib/assessment/narrative";
+import { sendInternalAssessmentEmail } from "../../../../../lib/email/internal-assessment";
 
 type RouteContext = { params: Promise<{ id: string }> };
 type HandlerDependencies = {
@@ -14,6 +15,7 @@ type HandlerDependencies = {
     id: string,
     source: NarrativeOutcome["source"],
   ) => Promise<void>;
+  sendInternalNotification: typeof sendInternalAssessmentEmail;
 };
 
 const UUID =
@@ -54,6 +56,8 @@ export function createAssessmentNarrativeHandler(
     dependencies.generateNarrative ?? generateValidatedNarrative;
   const updateNarrativeSource =
     dependencies.updateNarrativeSource ?? updateStoredNarrativeSource;
+  const sendInternalNotification =
+    dependencies.sendInternalNotification ?? sendInternalAssessmentEmail;
 
   return async function postAssessmentNarrative(
     request: Request,
@@ -74,8 +78,9 @@ export function createAssessmentNarrativeHandler(
 
     // Recompute the deterministic result server-side from the posted
     // answers - never trust a client-supplied result - matching the
-    // /api/assessment/calculate pattern. `parsed.lead` (contact/consent
-    // fields) is intentionally never read here or forwarded to the model.
+    // /api/assessment/calculate pattern. Lead and consent fields are never
+    // forwarded to the model; only the approved lead fields are used later
+    // for the internal notification.
     const result = buildAssessmentResult(parsed.answers);
 
     const narrative = await generateNarrative(result, {
@@ -92,8 +97,33 @@ export function createAssessmentNarrativeHandler(
       persistenceAvailable = false;
     }
 
+    let internalNotificationAccepted = false;
+    if (parsed.lead) {
+      try {
+        const notification = await sendInternalNotification({
+          assessmentId: id,
+          lead: {
+            name: parsed.lead.name,
+            email: parsed.lead.workEmail,
+            company: parsed.lead.company,
+            role: parsed.answers.role,
+          },
+          result,
+          narrative,
+        });
+        internalNotificationAccepted = notification.accepted;
+      } catch {
+        internalNotificationAccepted = false;
+      }
+    }
+
     return NextResponse.json(
-      { ok: true, narrative, persistenceAvailable },
+      {
+        ok: true,
+        narrative,
+        persistenceAvailable,
+        internalNotificationAccepted,
+      },
       { headers: PRIVATE_HEADERS },
     );
   };
