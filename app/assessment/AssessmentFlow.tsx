@@ -234,6 +234,16 @@ export function AssessmentFlow() {
   const [persistenceAvailable, setPersistenceAvailable] = useState(false);
   const [reportDeliveryState, setReportDeliveryState] =
     useState<DeliveryState>("idle");
+  const [narrative, setNarrative] = useState<{
+    source: "ai" | "rules";
+    text: string;
+  } | null>(null);
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
+  const [narrativeRequest, setNarrativeRequest] = useState<{
+    assessmentId: string;
+    answers: AssessmentAnswers;
+    lead: LeadDraft;
+  } | null>(null);
   const [apiValidationError, setApiValidationError] = useState<string | null>(
     null,
   );
@@ -288,6 +298,61 @@ export function AssessmentFlow() {
     }),
     [result],
   );
+
+  useEffect(() => {
+    if (!narrativeRequest) return;
+    const controller = new AbortController();
+    let active = true;
+
+    const requestNarrative = async () => {
+      try {
+        const response = await fetch(
+          `/api/assessment/${encodeURIComponent(narrativeRequest.assessmentId)}/narrative`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              answers: narrativeRequest.answers,
+              lead: narrativeRequest.lead,
+            }),
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok) return;
+        const body = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          narrative?: { source?: unknown; text?: unknown };
+        } | null;
+        if (
+          active &&
+          body?.ok === true &&
+          (body.narrative?.source === "ai" || body.narrative?.source === "rules") &&
+          typeof body.narrative.text === "string"
+        ) {
+          setNarrative({
+            source: body.narrative.source,
+            text: body.narrative.text,
+          });
+        }
+      } catch {
+        // A narrative is optional; deterministic rules remain visible.
+      } finally {
+        if (active) setNarrativeLoading(false);
+      }
+    };
+
+    void requestNarrative();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [narrativeRequest]);
+
+  const resetNarrativeState = () => {
+    setNarrative(null);
+    setNarrativeLoading(false);
+    setNarrativeRequest(null);
+  };
 
   useEffect(() => {
     if (screen !== "processing") return;
@@ -372,10 +437,26 @@ export function AssessmentFlow() {
           throw new Error("Assessment result was not persisted.");
         }
         if (!active) return;
+        const persistedAssessmentId =
+          typeof body.assessmentId === "string" && body.assessmentId
+            ? body.assessmentId
+            : null;
+        const persisted = body.persistenceAvailable === true && Boolean(persistedAssessmentId);
         setServerResult(body.result);
-        setAssessmentId(body.assessmentId ?? null);
+        setAssessmentId(persistedAssessmentId);
         setPersistenceAvailable(body.persistenceAvailable === true);
         setDeliveryUnavailable(body.persistenceAvailable !== true);
+        if (persisted && persistedAssessmentId) {
+          setNarrative(null);
+          setNarrativeLoading(true);
+          setNarrativeRequest({
+            assessmentId: persistedAssessmentId,
+            answers,
+            lead: leadDraft,
+          });
+        } else {
+          resetNarrativeState();
+        }
         setApiValidationError(null);
         setReportDeliveryState("idle");
         setScreen("full");
@@ -442,6 +523,7 @@ export function AssessmentFlow() {
 
   const continueWithCapacity = (capacity: CapacityInputs) => {
     setAnswers((current) => ({ ...current, capacity }));
+    resetNarrativeState();
     setServerResult(null);
     setDeliveryUnavailable(false);
     setApiValidationError(null);
@@ -835,6 +917,7 @@ export function AssessmentFlow() {
           <PrecisionInputs
             onBack={goBack}
             onUseEarlierRanges={() => {
+              resetNarrativeState();
               setServerResult(null);
               setDeliveryUnavailable(false);
               setApiValidationError(null);
@@ -883,6 +966,8 @@ export function AssessmentFlow() {
               persistenceAvailable={persistenceAvailable}
               deliveryState={reportDeliveryState}
               onDeliverReport={deliverReport}
+              narrative={narrative ?? undefined}
+              narrativeLoading={narrativeLoading}
             />
           </>
         )}

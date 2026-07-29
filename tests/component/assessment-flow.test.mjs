@@ -3,7 +3,7 @@ import test from "node:test";
 import "./setup.mjs";
 
 const React = await import("react");
-const { cleanup, render, screen, within } = await import("@testing-library/react");
+const { cleanup, render, screen, waitFor, within } = await import("@testing-library/react");
 const { default: userEvent } = await import("@testing-library/user-event");
 const { AssessmentFlow } = await import("../../app/assessment/AssessmentFlow.tsx");
 const { buildAssessmentResult } = await import("../../lib/assessment/result.ts");
@@ -608,4 +608,133 @@ test("a 5xx response retains the valid local result with the outage warning", as
     screen.getByRole("status").textContent,
     /report storage and delivery are temporarily unavailable/i,
   );
+});
+
+test("the persisted result renders before one deferred narrative request upgrades its interpretation", async () => {
+  let calculationPayload;
+  let narrativePayload;
+  let narrativeRequests = 0;
+  let resolveNarrative;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.includes("/api/assessment/calculate")) {
+      calculationPayload = JSON.parse(String(init?.body));
+      return Response.json({
+        ok: true,
+        assessmentId: "123e4567-e89b-42d3-a456-426614174000",
+        persistenceAvailable: true,
+        result: buildAssessmentResult(calculationPayload.answers),
+      });
+    }
+    if (url.includes("/narrative")) {
+      narrativeRequests += 1;
+      narrativePayload = JSON.parse(String(init?.body));
+      return new Promise((resolve) => {
+        resolveNarrative = resolve;
+      });
+    }
+    return Response.json({ ok: true }, { status: 202 });
+  };
+
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  const rulesSummary = buildAssessmentResult(calculationPayload.answers).narrative.summary;
+  assert.ok(screen.getByText(rulesSummary));
+  assert.match(screen.getByRole("status").textContent, /preparing a validated narrative/i);
+  await waitFor(() => assert.ok(narrativePayload));
+  assert.deepEqual(narrativePayload, {
+    answers: calculationPayload.answers,
+    lead: calculationPayload.lead,
+  });
+  assert.equal(narrativeRequests, 1);
+
+  resolveNarrative(
+    Response.json({
+      ok: true,
+      narrative: { source: "ai", text: "Validated operating interpretation." },
+    }),
+  );
+
+  await screen.findByText("Validated operating interpretation.");
+  await waitFor(() => assert.equal(screen.queryByRole("status"), null));
+  assert.equal(narrativeRequests, 1);
+});
+
+test("a failed narrative request preserves the rules interpretation and clears loading", async () => {
+  let deterministicResult;
+  let narrativeRequests = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.includes("/api/assessment/calculate")) {
+      const payload = JSON.parse(String(init?.body));
+      deterministicResult = buildAssessmentResult(payload.answers);
+      return Response.json({
+        ok: true,
+        assessmentId: "123e4567-e89b-42d3-a456-426614174000",
+        persistenceAvailable: true,
+        result: deterministicResult,
+      });
+    }
+    if (url.includes("/narrative")) {
+      narrativeRequests += 1;
+      return Response.json({ ok: false }, { status: 503 });
+    }
+    return Response.json({ ok: true }, { status: 202 });
+  };
+
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+  await user.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  await waitFor(() => assert.equal(screen.queryByRole("status"), null));
+  assert.ok(screen.getByText(deterministicResult.narrative.summary));
+  assert.ok(screen.getByText("Rules-based"));
+  assert.equal(narrativeRequests, 1);
+});
+
+test("unpersisted or unidentified results do not request narratives", async () => {
+  for (const calculationResponse of [
+    { persistenceAvailable: false, assessmentId: "123e4567-e89b-42d3-a456-426614174000" },
+    { persistenceAvailable: true },
+  ]) {
+    let narrativeRequests = 0;
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes("/api/assessment/calculate")) {
+        const payload = JSON.parse(String(init?.body));
+        return Response.json({
+          ok: true,
+          ...calculationResponse,
+          result: buildAssessmentResult(payload.answers),
+        });
+      }
+      if (url.includes("/narrative")) narrativeRequests += 1;
+      return Response.json({ ok: true }, { status: 202 });
+    };
+
+    const user = userEvent.setup();
+    renderAssessment();
+    await reachPreliminary(user);
+    await submitLead(user);
+    await user.click(
+      screen.getByRole("button", { name: "Continue without a financial range" }),
+    );
+    await screen.findByRole("heading", { name: "0 out of 100" });
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    assert.equal(narrativeRequests, 0);
+    cleanup();
+    sessionStorage.clear();
+  }
 });
