@@ -11,10 +11,14 @@
     "start": "vinext start",
     "test:domain": "node --import=tsx --test tests/assessment/*.test.mjs",
     "test:component": "node --import=tsx --test tests/component/*.test.mjs",
-    "test": "npm run test:domain && npm run test:component && npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run test:deployment && npm run test:domain && npm run test:component && npm run build && node --test tests/rendered-html.test.mjs",
     "test:e2e": "playwright test",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "test:deployment": "node --test tests/cloudflare-deployment.test.mjs",
+    "cf:build": "npm run build",
+    "cf:migrate": "wrangler d1 migrations apply runrate-advisory-production --remote",
+    "cf:deploy": "wrangler deploy --config dist/server/wrangler.json"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

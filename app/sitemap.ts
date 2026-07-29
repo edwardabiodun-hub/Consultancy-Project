@@ -1,2 +1,2 @@
 import type { MetadataRoute } from "next"; import { resources } from "../content/resources";
-export default function sitemap():MetadataRoute.Sitemap{const base=process.env.NEXT_PUBLIC_SITE_URL||"https://example.com";return["","/assessment","/diagnostic","/how-i-help","/founder-resources","/about","/contact","/privacy",...resources.map(r=>`/founder-resources/${r.slug}`)].map(path=>({url:`${base}${path}`}))}
+export default function sitemap():MetadataRoute.Sitemap{const base=process.env.NEXT_PUBLIC_SITE_URL||"https://www.runrategroup.com";return["","/assessment","/diagnostic","/how-i-help","/founder-resources","/about","/contact","/privacy",...resources.map(r=>`/founder-resources/${r.slug}`)].map(path=>({url:`${base}${path}`}))}
