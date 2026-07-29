@@ -704,6 +704,75 @@ test("a failed narrative request preserves the rules interpretation and clears l
   assert.equal(narrativeRequests, 1);
 });
 
+test("a fresh assessment aborts the prior narrative and rejects its stale resolution", async () => {
+  let calculationRequests = 0;
+  let narrativeRequests = 0;
+  let firstNarrativeSignal;
+  let resolveFirstNarrative;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (url.includes("/api/assessment/calculate")) {
+      calculationRequests += 1;
+      const payload = JSON.parse(String(init?.body));
+      return Response.json({
+        ok: true,
+        assessmentId: `123e4567-e89b-42d3-a456-42661417400${calculationRequests}`,
+        persistenceAvailable: true,
+        result: buildAssessmentResult(payload.answers),
+      });
+    }
+    if (url.includes("/narrative")) {
+      narrativeRequests += 1;
+      if (narrativeRequests === 1) {
+        firstNarrativeSignal = init?.signal;
+        return new Promise((resolve) => {
+          resolveFirstNarrative = resolve;
+        });
+      }
+      return Response.json({
+        ok: true,
+        narrative: { source: "ai", text: "Interpretation for the fresh assessment." },
+      });
+    }
+    return Response.json({ ok: true }, { status: 202 });
+  };
+
+  const firstUser = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(firstUser);
+  await submitLead(firstUser);
+  await firstUser.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+  await screen.findByRole("heading", { name: "0 out of 100" });
+  await waitFor(() => assert.equal(narrativeRequests, 1));
+
+  cleanup();
+  sessionStorage.clear();
+  assert.equal(firstNarrativeSignal?.aborted, true);
+
+  const secondUser = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(secondUser);
+  await submitLead(secondUser);
+  await secondUser.click(
+    screen.getByRole("button", { name: "Continue without a financial range" }),
+  );
+  await screen.findByText("Interpretation for the fresh assessment.");
+
+  resolveFirstNarrative(
+    Response.json({
+      ok: true,
+      narrative: { source: "ai", text: "Stale interpretation from the prior assessment." },
+    }),
+  );
+
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  assert.equal(screen.queryByText("Stale interpretation from the prior assessment."), null);
+  assert.ok(screen.getByText("Interpretation for the fresh assessment."));
+  assert.equal(calculationRequests, 2);
+  assert.equal(narrativeRequests, 2);
+});
 test("unpersisted or unidentified results do not request narratives", async () => {
   for (const calculationResponse of [
     { persistenceAvailable: false, assessmentId: "123e4567-e89b-42d3-a456-426614174000" },
