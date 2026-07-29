@@ -136,17 +136,14 @@ past results without silently re-scoring them.
 - `lib/email/assessment-report.ts` and
   `app/api/assessment/[id]/deliver/route.ts` — optional report email delivery
   via Resend.
-- `lib/assessment/narrative.ts` / `narrative-validation.ts` — optional
-  OpenAI-generated narrative, validated against the deterministic result
-  before use. **Built and fully tested, but not yet wired into the
-  visitor-facing flow**: `app/api/assessment/[id]/narrative/route.ts` exists
-  and works, but nothing in `AssessmentFlow.tsx`/`FullResult.tsx` calls it —
-  the result screen always shows the rules-based narrative today, regardless
-  of whether `OPENAI_API_KEY`/`ASSESSMENT_NARRATIVE_MODEL` are configured.
-  This is a deliberate scope boundary (no task in the implementation plan
-  covers UI wiring for this feature), not a defect. Wiring it in — calling
-  the endpoint from the flow and making `FullResult`'s "Rules-based" label
-  dynamic on `narrative.source` — is a follow-up, not a bug fix.
+- `lib/assessment/narrative.ts` / `narrative-validation.ts` — the result screen
+  renders the deterministic result and rules summary first, then requests an
+  optional narrative enhancement asynchronously. A validated AI narrative or
+  rules fallback replaces the summary with its source clearly labeled. The
+  narrative request sends one internal notification to `CONTACT_TO_EMAIL` that
+  includes approved lead identity fields; lead identity is excluded from the
+  OpenAI request. Narrative prose is never retained (only the accepted source,
+  `ai` or `rules`, may be recorded).
 
 ### Environment variables
 
@@ -157,7 +154,7 @@ fully configured.
 | Variable | Required for | Behavior when unset |
 |---|---|---|
 | `RESEND_API_KEY` | Contact form and assessment-report email delivery | `/api/contact` and `/api/assessment/:id/deliver` return `503` with a clear "not yet configured" error; no email is sent and no result data is lost |
-| `CONTACT_TO_EMAIL` | Contact form delivery destination | Same as above |
+| `CONTACT_TO_EMAIL` | Contact form and internal assessment-notification destination | Same as above |
 | `CONTACT_FROM_EMAIL` | Contact form sender identity | Same as above |
 | `ASSESSMENT_REPORT_FROM_EMAIL` | Assessment report sender identity | `/api/assessment/:id/deliver` returns `503`, same as above |
 | `NEXT_PUBLIC_SITE_URL` | Absolute URLs in emails/metadata | Falls back to relative paths |
