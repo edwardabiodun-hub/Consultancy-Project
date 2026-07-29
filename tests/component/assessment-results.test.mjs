@@ -531,6 +531,36 @@ test("full result renders the controlled executive sequence and bounded outputs"
   assert.equal(screen.queryByRole("meter"), null);
 });
 
+test("full result displays the rules narrative when no validated override is provided", () => {
+  const result = buildAssessmentResult(exactAnswers);
+  render(React.createElement(FullResult, { result, assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159", persistenceAvailable: true }));
+  const interpretation = screen.getByRole("heading", { name: "Executive interpretation" }).parentElement;
+  assert.ok(interpretation.textContent.includes(result.narrative.summary));
+  assert.match(interpretation.textContent, /Rules-based/);
+});
+
+test("full result announces validated narrative preparation without hiding the rules text", () => {
+  const result = buildAssessmentResult(exactAnswers);
+  render(React.createElement(FullResult, { result, assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159", persistenceAvailable: true, narrativeLoading: true }));
+  assert.match(screen.getByRole("status").textContent, /Preparing a validated narrative/);
+  assert.ok(screen.getByText(result.narrative.summary).textContent.includes(result.narrative.summary));
+});
+
+test("full result identifies validated AI narrative text without attributing score calculation", () => {
+  const result = buildAssessmentResult(exactAnswers);
+  render(React.createElement(FullResult, { result, assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159", persistenceAvailable: true, narrative: { source: "ai", text: "Your operating evidence supports a focused 90-day plan." } }));
+  const interpretation = screen.getByRole("heading", { name: "Executive interpretation" }).parentElement;
+  assert.match(interpretation.textContent, /Your operating evidence supports a focused 90-day plan\./);
+  assert.match(interpretation.textContent, /AI-generated and validated/);
+});
+
+test("full result identifies supplied rules fallback narrative text", () => {
+  const result = buildAssessmentResult(exactAnswers);
+  render(React.createElement(FullResult, { result, assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159", persistenceAvailable: true, narrative: { source: "rules", text: "The rules-based interpretation remains the current assessment narrative." } }));
+  const interpretation = screen.getByRole("heading", { name: "Executive interpretation" }).parentElement;
+  assert.match(interpretation.textContent, /The rules-based interpretation remains the current assessment narrative\./);
+  assert.match(interpretation.textContent, /Rules-based/);
+});
 test("full result offers an email trigger that reports success, duplicate, and failure feedback", async () => {
   const user = userEvent.setup();
   const result = buildAssessmentResult(exactAnswers);

@@ -11,12 +11,19 @@ export type DeliveryState =
   | "already_sent"
   | "error";
 
+export type DisplayNarrative = {
+  source: "ai" | "rules";
+  text: string;
+};
+
 type FullResultProps = {
   result: AssessmentResult;
   assessmentId?: string;
   persistenceAvailable?: boolean;
   deliveryState?: DeliveryState;
   onDeliverReport?: () => void;
+  narrative?: DisplayNarrative;
+  narrativeLoading?: boolean;
 };
 
 const COMPONENT_LABELS: Record<ComponentId, string> = {
@@ -49,12 +56,17 @@ export function FullResult({
   persistenceAvailable = false,
   deliveryState = "idle",
   onDeliverReport,
+  narrative,
+  narrativeLoading = false,
 }: FullResultProps) {
   const components = Object.entries(result.score.components) as [
     ComponentId,
     AssessmentResult["score"]["components"][ComponentId],
   ][];
   const capacity = result.capacity;
+  const displayedNarrative = narrative?.text ?? result.narrative.summary;
+  const narrativeLabel =
+    narrative?.source === "ai" ? "AI-generated and validated" : "Rules-based";
 
   // Non-identifying context shared by every event fired from this rendered
   // result: which assessment (when persisted) and the deterministic
@@ -154,9 +166,10 @@ export function FullResult({
       </div>
 
       <section className="assessment-result-section" aria-labelledby="executive-interpretation">
-        <div className="assessment-section-label">Rules-based</div>
+        <div className="assessment-section-label">{narrativeLabel}</div>
         <h2 id="executive-interpretation">Executive interpretation</h2>
-        <p>{result.narrative.summary}</p>
+        {narrativeLoading && <p role="status">Preparing a validated narrative…</p>}
+        <p>{displayedNarrative}</p>
       </section>
 
       <section className="assessment-result-section" aria-labelledby="component-scores-heading">
