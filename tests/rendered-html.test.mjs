@@ -81,7 +81,7 @@ test("renders the accessible RunRate Advisory identity in the shared site chrome
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /src="\/brand\/runrate-icon\.svg"/);
-  assert.match(html, /width="56"[^>]+height="56"/);
+  assert.match(html, /width="76"[^>]+height="76"/);
   assert.match(html, />RUNRATE</);
   assert.match(html, />ADVISORY</);
   assert.match(html, /aria-label="RunRate Advisory home"/);

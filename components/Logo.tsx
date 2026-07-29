@@ -16,9 +16,9 @@ export function Logo({ className = "" }: LogoProps) {
         alt=""
         aria-hidden="true"
         className="brand-mark"
-        height="56"
+        height="76"
         src="/brand/runrate-icon.svg"
-        width="56"
+        width="76"
       />
       <span className="brand-wordmark">
         <span className="brand-name">RUNRATE</span>
