@@ -154,7 +154,7 @@ fully configured.
 | Variable | Required for | Behavior when unset |
 |---|---|---|
 | `RESEND_API_KEY` | Contact form and assessment-report email delivery | `/api/contact` and `/api/assessment/:id/deliver` return `503` with a clear "not yet configured" error; no email is sent and no result data is lost |
-| `CONTACT_TO_EMAIL` | Contact form and internal assessment-notification destination | Same as above |
+| `CONTACT_TO_EMAIL` | Contact form and internal assessment-notification destination | The contact form returns `503` when required email configuration is absent. For the internal assessment notification, missing configuration returns `internalNotificationAccepted: false`; the narrative route still returns `200` and the visitor result remains available. |
 | `CONTACT_FROM_EMAIL` | Contact form sender identity | Same as above |
 | `ASSESSMENT_REPORT_FROM_EMAIL` | Assessment report sender identity | `/api/assessment/:id/deliver` returns `503`, same as above |
 | `NEXT_PUBLIC_SITE_URL` | Absolute URLs in emails/metadata | Falls back to relative paths |
