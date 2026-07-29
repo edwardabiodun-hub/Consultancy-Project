@@ -16,6 +16,9 @@ const { FullResult } = await import("../../app/assessment/FullResult.tsx");
 const { BandedCapacityInputs } = await import(
   "../../app/assessment/BandedCapacityInputs.tsx"
 );
+const { AssessmentSampleResult } = await import(
+  "../../app/assessment/AssessmentSampleResult.tsx"
+);
 
 const exactAnswers = {
   employeeBand: "20-49",
@@ -51,6 +54,23 @@ const exactAnswers = {
 
 test.afterEach(() => {
   cleanup();
+});
+
+test("landing sample remains illustrative and read-only", () => {
+  render(React.createElement(AssessmentSampleResult));
+
+  const sample = screen.getByRole("region", {
+    name: "Illustrative example assessment result",
+  });
+  assert.ok(
+    within(sample).getByRole("heading", {
+      name: "See what a completed assessment can reveal.",
+    }),
+  );
+  assert.equal(sample.querySelector("form"), null);
+  assert.equal(sample.querySelector("input"), null);
+  assert.equal(sample.querySelector('input[type="email"]'), null);
+  assert.equal(sample.querySelector('[type="submit"]'), null);
 });
 
 test("preliminary result provides evidence without exposing monetary capacity", async () => {

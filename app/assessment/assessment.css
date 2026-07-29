@@ -86,6 +86,221 @@
   font-size: 0.9rem;
 }
 
+.assessment-sample {
+  margin-top: 2.5rem;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid var(--rule, #c7ced1);
+  background: var(--canvas, #edefec);
+}
+
+.assessment-sample-header {
+  padding-bottom: 1.4rem;
+  border-bottom: 1px solid var(--rule, #c7ced1);
+}
+
+.assessment-sample-label {
+  margin: 0;
+  color: var(--bronze, #536c7f);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.assessment-sample h2,
+.assessment-sample h3 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 400;
+}
+
+.assessment-sample h2 {
+  max-width: 18ch;
+  margin: 0.55rem 0 0.7rem;
+  color: var(--forest, #23384a);
+  font-size: clamp(1.75rem, 4vw, 2.45rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+}
+
+.assessment-sample h3 {
+  margin: 0 0 0.85rem;
+  color: var(--forest, #23384a);
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.assessment-sample-header > p:last-child {
+  max-width: 37rem;
+  margin: 0;
+  color: var(--muted, #586773);
+}
+
+.assessment-sample-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(11rem, 0.65fr);
+  gap: 1px;
+  margin-top: 1px;
+  background: var(--rule, #c7ced1);
+}
+
+.assessment-sample-profile,
+.assessment-sample-score {
+  min-width: 0;
+  padding: 1.25rem;
+  background: var(--paper, #f7f8f6);
+}
+
+.assessment-sample-profile ul,
+.assessment-sample-risk-list,
+.assessment-sample-priorities ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.assessment-sample-profile li,
+.assessment-sample-risk-list li,
+.assessment-sample-priorities li {
+  margin-top: 0.55rem;
+}
+
+.assessment-sample-profile li:first-child,
+.assessment-sample-risk-list li:first-child,
+.assessment-sample-priorities li:first-child {
+  margin-top: 0;
+}
+
+.assessment-sample-profile li::marker,
+.assessment-sample-risk-list li::marker,
+.assessment-sample-priorities li::marker {
+  color: var(--bronze, #536c7f);
+  font-weight: 800;
+}
+
+.assessment-sample-score {
+  border-top: 3px solid var(--bronze, #536c7f);
+}
+
+.assessment-sample-score-value {
+  display: flex;
+  align-items: baseline;
+  margin: 0.25rem 0 1rem;
+  color: var(--forest, #23384a);
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+}
+
+.assessment-sample-score-value strong {
+  font-size: clamp(3.6rem, 10vw, 5.25rem);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+}
+
+.assessment-sample-score-value span {
+  font-size: 1.1rem;
+}
+
+.assessment-sample-score dl,
+.assessment-sample-capacity,
+.assessment-sample-components {
+  margin: 0;
+}
+
+.assessment-sample-score dl {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.assessment-sample-score dl div {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--rule, #c7ced1);
+}
+
+.assessment-sample dt {
+  color: var(--muted, #586773);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assessment-sample dd {
+  margin: 0.25rem 0 0;
+  color: var(--forest, #23384a);
+  font-weight: 700;
+}
+
+.assessment-sample-section,
+.assessment-sample-priorities {
+  padding: 1.35rem 0;
+  border-bottom: 1px solid var(--rule, #c7ced1);
+}
+
+.assessment-sample-components {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.assessment-sample-components > div {
+  min-width: 0;
+}
+
+.assessment-sample-components dt {
+  min-height: 2.8em;
+  overflow-wrap: anywhere;
+}
+
+.assessment-sample-components dd {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.assessment-sample-bar {
+  display: block;
+  height: 0.45rem;
+  overflow: hidden;
+  background: var(--stone, #dce1e2);
+}
+
+.assessment-sample-bar span {
+  display: block;
+  height: 100%;
+  background: var(--forest, #23384a);
+}
+
+.assessment-sample-support {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+}
+
+.assessment-sample-support > section:first-child {
+  padding-right: 1.25rem;
+}
+
+.assessment-sample-support > section:last-child {
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--rule, #c7ced1);
+}
+
+.assessment-sample-capacity {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.assessment-sample-disclaimer {
+  margin: 1.25rem 0 0;
+  padding: 1rem;
+  border-left: 3px solid var(--bronze, #536c7f);
+  background: var(--paper, #f7f8f6);
+  color: var(--muted, #586773);
+  font-size: 0.82rem;
+}
+
+.assessment-sample-priorities {
+  border-bottom: 0;
+}
+
 .assessment-progress-wrap {
   margin-bottom: 1.4rem;
 }
@@ -693,6 +908,29 @@
   .assessment-capacity-grid div + div {
     border-top: 1px solid var(--rule, #c7ced1);
     border-left: 0;
+  }
+}
+
+@media (max-width: 759px) {
+  .assessment-sample-summary,
+  .assessment-sample-components,
+  .assessment-sample-support,
+  .assessment-sample-capacity,
+  .assessment-sample-score dl {
+    grid-template-columns: 1fr;
+  }
+
+  .assessment-sample-support > section:first-child {
+    padding-right: 0;
+  }
+
+  .assessment-sample-support > section:last-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .assessment-sample-components dt {
+    min-height: 0;
   }
 }
 

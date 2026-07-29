@@ -25,6 +25,7 @@ import {
 } from "./PrecisionInputs";
 import type { PrecisionDrafts } from "./PrecisionInputs";
 import { PreliminaryResult } from "./PreliminaryResult";
+import { AssessmentSampleResult } from "./AssessmentSampleResult";
 
 type Screen =
   | "landing"
@@ -553,6 +554,7 @@ export function AssessmentFlow() {
                 </dd>
               </div>
             </dl>
+            <AssessmentSampleResult />
             <div className="assessment-actions">
               <button
                 className="button"

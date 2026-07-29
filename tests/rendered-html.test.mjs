@@ -205,6 +205,24 @@ test("renders the Business Independence Assessment entry experience", async () =
   assert.match(html, /Start the assessment/i);
 });
 
+test("renders a guided illustrative assessment result without requiring submission", async () => {
+  const response = await request("/assessment");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+
+  assert.match(html, /Illustrative example/);
+  assert.match(html, /58[\s\S]*?\/100/);
+  assert.match(html, /Assessment confidence[\s\S]*Medium/);
+  assert.match(html, /Owner Dependency/);
+  assert.match(html, /Operating-System Maturity/);
+  assert.match(html, /Information Visibility/);
+  assert.match(html, /Owner capacity[\s\S]*12 to 18 hours per month/);
+  assert.match(
+    html,
+    /directional and illustrative[\s\S]*not an audit, valuation, financial opinion, benchmark, or promise/i,
+  );
+});
+
 test("assessment and paid diagnostic remain separate, non-overlapping routes", async () => {
   const [diagnosticHtml, assessmentHtml] = await Promise.all([
     request("/diagnostic").then((response) => response.text()),
