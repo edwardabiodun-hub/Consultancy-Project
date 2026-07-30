@@ -86,6 +86,8 @@ test("privacy, consent, and operations docs disclose internal narrative email an
   }
   assert.match(gate, /internal assessment notification/i);
   assert.match(gate, /90-day period/i);
-  assert.match(readme, /0006_lethal_scarlet_witch\.sql/i);
-  assert.match(readme, /role.*null.*narrative/i);
+  assert.match(readme, /0007_happy_dust\.sql/i);
+  assert.match(readme, /wrangler\.jsonc/i);
+  assert.match(readme, /npm run cf:migrate/i);
+  assert.match(readme, /role-null\s+records are rejected/i);
 });

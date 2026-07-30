@@ -81,6 +81,8 @@ const createStatefulDependencies = (overrides = {}) => {
         record.narrativeSelectionJson = acceptedSelection
           ? JSON.stringify(acceptedSelection)
           : null;
+        record.narrativeAttemptStatus = "completed";
+
       },
       finalizeInternalNotification: async () => {},
       sendInternalNotification: async () => ({ accepted: true }),
@@ -203,4 +205,136 @@ test("a generated migration adds nullable closed-set selection storage only", as
   assert.match(selectionMigration, /ADD `narrative_selection_json` text;/i);
   assert.doesNotMatch(selectionMigration, /narrative_selection_json[^;]*NOT NULL/i);
   assert.doesNotMatch(selectionMigration, /narrative_selection_(?:text|prose)/i);
+});
+test("a concurrent request defers notification while the one-time AI winner is in flight", async () => {
+  const record = createStoredRecord();
+  let releaseInitialReads;
+  let initialReadCount = 0;
+  const initialReadsComplete = new Promise((resolve) => { releaseInitialReads = resolve; });
+  let releaseGeneration;
+  let signalGenerationStarted;
+  const generationStarted = new Promise((resolve) => { signalGenerationStarted = resolve; });
+  const generationReleased = new Promise((resolve) => { releaseGeneration = resolve; });
+  const sentNarratives = [];
+  let publishCalls = 0;
+  let fingerprintCalls = 0;
+  let notificationClaimCalls = 0;
+  const handler = createAssessmentNarrativeHandler({
+    findRecord: async () => {
+      if (initialReadCount < 2) {
+        initialReadCount += 1;
+        const snapshot = { ...record };
+        if (initialReadCount === 2) releaseInitialReads();
+        await initialReadsComplete;
+        return snapshot;
+      }
+      return { ...record };
+    },
+    checkRateLimit: async () => true,
+    checkGlobalRateLimit: async () => true,
+    isNarrativeModelConfigured: () => true,
+    claimNarrativeAttempt: async () => {
+      if (record.narrativeAttemptStatus !== "pending") return "already_attempted";
+      record.narrativeAttemptStatus = "generating";
+      record.narrativeAttemptedAt = "2026-07-30T12:00:00.000Z";
+      return "claimed";
+    },
+    generateNarrative: async () => {
+      signalGenerationStarted();
+      await generationReleased;
+      return { source: "ai", text: localNarrativeText, selection };
+    },
+    updateNarrativeSource: async (_id, source, acceptedSelection, expectedStatus) => {
+      publishCalls += 1;
+      if (record.narrativeAttemptStatus !== expectedStatus) return false;
+      record.narrativeSource = source;
+      record.narrativeSelectionJson = acceptedSelection
+        ? JSON.stringify(acceptedSelection)
+        : null;
+      record.narrativeAttemptStatus = "completed";
+      return true;
+    },
+    finalizeStaleNarrativeAttempt: async () => false,
+    fingerprintInternalNotification: async (input) => {
+      fingerprintCalls += 1;
+      return JSON.stringify(input);
+    },
+    claimInternalNotification: async () => {
+      notificationClaimCalls += 1;
+      return "claimed";
+    },
+    finalizeInternalNotification: async () => {},
+    sendInternalNotification: async (input) => {
+      sentNarratives.push(input.narrative);
+      return { accepted: true };
+    },
+  });
+
+  const firstRequest = handler(request(), context).then(async (response) => response.json());
+  const secondRequest = handler(request(), context).then(async (response) => response.json());
+  await generationStarted;
+  const loserBody = await Promise.race([firstRequest, secondRequest]);
+
+  assert.equal(loserBody.internalNotificationAccepted, false);
+  assert.equal(sentNarratives.length, 0);
+  assert.equal(publishCalls, 0);
+  assert.equal(fingerprintCalls, 0);
+  assert.equal(notificationClaimCalls, 0);
+  assert.equal(record.narrativeAttemptStatus, "generating");
+  assert.equal(record.narrativeSelectionJson, null);
+
+  releaseGeneration();
+  const responses = await Promise.all([firstRequest, secondRequest]);
+  const winnerBody = responses.find((body) => body.internalNotificationAccepted);
+
+  assert.equal(winnerBody.internalNotificationAccepted, true);
+  assert.deepEqual(sentNarratives, [{ source: "ai", text: localNarrativeText }]);
+  assert.equal(publishCalls, 1);
+  assert.equal(fingerprintCalls, 1);
+  assert.equal(notificationClaimCalls, 1);
+  assert.equal(record.narrativeAttemptStatus, "completed");
+  assert.equal(record.narrativeSelectionJson, JSON.stringify(selection));
+});
+
+test("a stale in-flight attempt is atomically failed before a rules notification is sent", async () => {
+  const record = {
+    ...createStoredRecord(),
+    narrativeAttemptStatus: "generating",
+    narrativeAttemptedAt: "2026-07-30T10:00:00.000Z",
+  };
+  let staleFinalizations = 0;
+  let sentNarrative = null;
+  const handler = createAssessmentNarrativeHandler({
+    findRecord: async () => ({ ...record }),
+    checkRateLimit: async () => true,
+    checkGlobalRateLimit: async () => true,
+    isNarrativeModelConfigured: () => true,
+    claimNarrativeAttempt: async () => "already_attempted",
+    generateNarrative: async () => { throw new Error("must not call OpenAI"); },
+    updateNarrativeSource: async () => { throw new Error("must not overwrite stale state directly"); },
+    finalizeStaleNarrativeAttempt: async (_id, attemptedAt) => {
+      staleFinalizations += 1;
+      if (record.narrativeAttemptStatus !== "generating"
+        || record.narrativeAttemptedAt !== attemptedAt) return false;
+      record.narrativeAttemptStatus = "failed";
+      record.narrativeSource = "rules";
+      record.narrativeSelectionJson = null;
+      return true;
+    },
+    fingerprintInternalNotification: async () => "stale-rules-hash",
+    claimInternalNotification: async () => "claimed",
+    finalizeInternalNotification: async () => {},
+    sendInternalNotification: async (input) => {
+      sentNarrative = input.narrative;
+      return { accepted: true };
+    },
+    now: () => new Date("2026-07-30T12:00:00.000Z"),
+  });
+
+  const body = await (await handler(request(), context)).json();
+
+  assert.equal(staleFinalizations, 1);
+  assert.deepEqual(sentNarrative, { source: "rules", text: result.narrative.summary });
+  assert.equal(body.internalNotificationAccepted, true);
+  assert.equal(record.narrativeAttemptStatus, "failed");
 });

@@ -34,7 +34,13 @@ type HandlerDependencies = {
     id: string,
     source: NarrativeOutcome["source"],
     selection: NarrativeSelection | null,
-  ) => Promise<void>;
+    expectedStatus: "pending" | "generating",
+  ) => Promise<boolean | void>;
+  finalizeStaleNarrativeAttempt: (
+    id: string,
+    attemptedAt: string,
+  ) => Promise<boolean>;
+  now: () => Date;
   fingerprintInternalNotification: (input: NotificationInput) => Promise<string>;
   claimInternalNotification: (id: string, payloadHash: string) => Promise<NotificationClaim>;
   finalizeInternalNotification: (id: string, outcome: NotificationOutcome) => Promise<void>;
@@ -79,14 +85,20 @@ const updateStoredNarrativeSource = async (
   id: string,
   source: NarrativeOutcome["source"],
   selection: NarrativeSelection | null,
-) => {
+  expectedStatus: "pending" | "generating",
+): Promise<boolean> => {
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"), import("../../../../../db/schema"),
   ]);
-  await getDb().update(assessmentRecords).set({
+  const updated = await getDb().update(assessmentRecords).set({
     narrativeSource: source,
     narrativeSelectionJson: selection ? JSON.stringify(selection) : null,
-  }).where(eq(assessmentRecords.id, id));
+    narrativeAttemptStatus: "completed",
+  }).where(and(
+    eq(assessmentRecords.id, id),
+    eq(assessmentRecords.narrativeAttemptStatus, expectedStatus),
+  )).run();
+  return changedRows(updated) === 1;
 };
 
 const changedRows = (result: unknown): number =>
@@ -97,7 +109,7 @@ const claimStoredNarrativeAttempt = async (id: string): Promise<NarrativeAttempt
     import("../../../../../db"), import("../../../../../db/schema"),
   ]);
   const claimed = await getDb().update(assessmentRecords).set({
-    narrativeAttemptStatus: "attempted",
+    narrativeAttemptStatus: "generating",
     narrativeAttemptedAt: new Date().toISOString(),
   }).where(and(
     eq(assessmentRecords.id, id),
@@ -105,6 +117,40 @@ const claimStoredNarrativeAttempt = async (id: string): Promise<NarrativeAttempt
     isNull(assessmentRecords.narrativeAttemptedAt),
   )).run();
   return changedRows(claimed) === 1 ? "claimed" : "already_attempted";
+};
+
+export const NARRATIVE_ATTEMPT_LEASE_MS = 30 * 1000;
+
+export const isStaleNarrativeAttempt = (
+  status: string | null | undefined,
+  attemptedAt: string | null | undefined,
+  now: Date = new Date(),
+): boolean => {
+  if (status !== "generating" || !attemptedAt) return false;
+  const attemptedAtMs = Date.parse(attemptedAt);
+  if (!Number.isFinite(attemptedAtMs)) return false;
+  return now.getTime() - attemptedAtMs > NARRATIVE_ATTEMPT_LEASE_MS;
+};
+
+const finalizeStoredStaleNarrativeAttempt = async (
+  id: string,
+  attemptedAt: string,
+): Promise<boolean> => {
+  const [{ getDb }, { assessmentRecords }] = await Promise.all([
+    import("../../../../../db"), import("../../../../../db/schema"),
+  ]);
+  const cutoff = new Date(Date.now() - NARRATIVE_ATTEMPT_LEASE_MS).toISOString();
+  const finalized = await getDb().update(assessmentRecords).set({
+    narrativeSource: "rules",
+    narrativeSelectionJson: null,
+    narrativeAttemptStatus: "failed",
+  }).where(and(
+    eq(assessmentRecords.id, id),
+    eq(assessmentRecords.narrativeAttemptStatus, "generating"),
+    eq(assessmentRecords.narrativeAttemptedAt, attemptedAt),
+    lt(assessmentRecords.narrativeAttemptedAt, cutoff),
+  )).run();
+  return changedRows(finalized) === 1;
 };
 
 export const INTERNAL_NOTIFICATION_LEASE_MS = 10 * 60 * 1000;
@@ -222,6 +268,9 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
   const claimNarrativeAttempt = dependencies.claimNarrativeAttempt ?? claimStoredNarrativeAttempt;
   const generateNarrative = dependencies.generateNarrative ?? generateValidatedNarrative;
   const updateNarrativeSource = dependencies.updateNarrativeSource ?? updateStoredNarrativeSource;
+  const finalizeStaleNarrativeAttempt = dependencies.finalizeStaleNarrativeAttempt
+    ?? finalizeStoredStaleNarrativeAttempt;
+  const now = dependencies.now ?? (() => new Date());
   const fingerprintInternalNotification = dependencies.fingerprintInternalNotification ?? fingerprintInternalAssessmentEmail;
   const claimInternalNotification = dependencies.claimInternalNotification ?? claimStoredInternalNotification;
   const finalizeInternalNotification = dependencies.finalizeInternalNotification ?? finalizeStoredInternalNotification;
@@ -255,28 +304,104 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
       text: result.narrative.summary,
       selection: null,
     };
-    const restoredNarrative = record.narrativeSource === "ai"
-      ? restoreNarrativeSelection(record.narrativeSelectionJson, result)
-      : null;
-    let narrativeState = restoredNarrative ?? rulesNarrative;
+    let narrativeState = rulesNarrative;
+    let definitiveOutcome = false;
+    let persistenceAvailable = true;
 
-    if (!restoredNarrative && isNarrativeModelConfigured()) {
-      let openAiBudgetAvailable = false;
-      try {
-        openAiBudgetAvailable = await checkGlobalRateLimit();
-      } catch {
-        openAiBudgetAvailable = false;
+    const terminalNarrative = (candidate: AssessmentRecord): NarrativeGeneration | null => {
+      if (!["attempted", "completed", "failed"].includes(candidate.narrativeAttemptStatus)) {
+        return null;
       }
-      if (openAiBudgetAvailable) {
+      if (candidate.narrativeSource === "ai") {
+        return restoreNarrativeSelection(candidate.narrativeSelectionJson, result) ?? rulesNarrative;
+      }
+      return rulesNarrative;
+    };
+    const refreshTerminalNarrative = async (): Promise<void> => {
+      const refreshed = await findRecord(id);
+      if (!refreshed) return;
+      const terminal = terminalNarrative(refreshed);
+      if (terminal) {
+        narrativeState = terminal;
+        definitiveOutcome = true;
+      }
+    };
+
+    const existingTerminal = terminalNarrative(record);
+    if (existingTerminal) {
+      narrativeState = existingTerminal;
+      definitiveOutcome = true;
+    } else if (record.narrativeAttemptStatus === "generating") {
+      if (isStaleNarrativeAttempt(
+        record.narrativeAttemptStatus,
+        record.narrativeAttemptedAt,
+        now(),
+      ) && record.narrativeAttemptedAt) {
+        try {
+          definitiveOutcome = await finalizeStaleNarrativeAttempt(
+            id,
+            record.narrativeAttemptedAt,
+          );
+          if (!definitiveOutcome) await refreshTerminalNarrative();
+        } catch {
+          persistenceAvailable = false;
+        }
+      }
+    } else if (record.narrativeAttemptStatus === "pending") {
+      let useOpenAi = false;
+      if (isNarrativeModelConfigured()) {
+        try {
+          useOpenAi = await checkGlobalRateLimit();
+        } catch {
+          useOpenAi = false;
+        }
+      }
+
+      if (useOpenAi) {
         try {
           if ((await claimNarrativeAttempt(id)) === "claimed") {
-            const generated = await generateNarrative(result);
-            narrativeState = generated.source === "ai"
-              ? resolveNarrativeOutcome(generated.selection, result) ?? rulesNarrative
-              : rulesNarrative;
+            let generated = rulesNarrative;
+            try {
+              const candidate = await generateNarrative(result);
+              generated = candidate.source === "ai"
+                ? resolveNarrativeOutcome(candidate.selection, result) ?? rulesNarrative
+                : rulesNarrative;
+            } catch {
+              generated = rulesNarrative;
+            }
+            const published = await updateNarrativeSource(
+              id,
+              generated.source,
+              generated.selection,
+              "generating",
+            );
+            if (published !== false) {
+              narrativeState = generated;
+              definitiveOutcome = true;
+            } else {
+              await refreshTerminalNarrative();
+            }
+          } else {
+            await refreshTerminalNarrative();
           }
         } catch {
-          narrativeState = rulesNarrative;
+          persistenceAvailable = false;
+        }
+      } else {
+        try {
+          const published = await updateNarrativeSource(
+            id,
+            rulesNarrative.source,
+            null,
+            "pending",
+          );
+          if (published !== false) {
+            definitiveOutcome = true;
+          } else {
+            await refreshTerminalNarrative();
+          }
+        } catch {
+          persistenceAvailable = false;
         }
       }
     }
@@ -285,15 +410,8 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
       source: narrativeState.source,
       text: narrativeState.text,
     };
-    let persistenceAvailable = true;
-    try {
-      await updateNarrativeSource(id, narrative.source, narrativeState.selection);
-    } catch {
-      persistenceAvailable = false;
-    }
-
     let internalNotificationAccepted = false;
-    if (persistenceAvailable && parsed.lead) {
+    if (definitiveOutcome && persistenceAvailable && parsed.lead) {
       const notificationInput: NotificationInput = {
         assessmentId: id,
         lead: {

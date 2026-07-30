@@ -16,14 +16,14 @@ npm run dev
 npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+`wrangler.jsonc` is the committed Cloudflare deployment source for the Worker, D1 database, assets, Images binding, rate limiters, and retention schedule.
 
 ## Included Shape
 
 - edit site code under `app/`
 - `.openai/hosting.json` declares optional Sites D1 and R2 bindings
 - `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
+- `db/schema.ts` defines the production D1 assessment, analytics, and retention tables
 - `examples/d1/` contains an optional D1 example surface
 - `drizzle.config.ts` supports local migration generation when needed
 
@@ -166,17 +166,19 @@ npm run db:generate
 
 This runs `drizzle-kit generate` and writes a new numbered SQL migration into
 `drizzle/` (see `drizzle/0001_assessment_records.sql` through
-`drizzle/0006_lethal_scarlet_witch.sql` for the assessment-record schema
-history) plus a matching snapshot in `drizzle/meta/`. `drizzle.config.ts`
-targets the `sqlite` dialect against `db/schema.ts`. This repository only
-generates migration SQL; applying generated migrations to a live D1 database
-is a deployment-time step for whichever hosting/CI process owns the `DB`
-binding referenced in `.openai/hosting.json`, and is outside the scope of
-this codebase.
+`drizzle/0007_happy_dust.sql` for the assessment-record schema history) plus a
+matching snapshot in `drizzle/meta/`. `drizzle.config.ts` targets the `sqlite`
+dialect against `db/schema.ts`. Applying generated migrations to the live D1
+database is a deployment-time step for the `DB` binding declared in
+`wrangler.jsonc`.
 
-Before enabling the visitor narrative endpoint in production, apply
-`drizzle/0005_striped_wilson_fisk.sql`. It adds the persisted role and internal
-notification claim fields. Pre-migration role-null records are rejected by the narrative endpoint rather than allowing a weaker match; submit a new assessment after migration.
+Before enabling this release in production, apply all pending D1 migrations
+through `drizzle/0007_happy_dust.sql` with `npm run cf:migrate`. Migrations
+`0005` through `0007` provide the persisted role, internal notification claim
+and hash fields, narrative-attempt state, normalized findings, and closed-set
+selection IDs required by the narrative endpoint. Pre-migration role-null
+records are rejected rather than allowing a weaker match; submit a new
+assessment after migration.
 
 ### Local rules-only mode
 

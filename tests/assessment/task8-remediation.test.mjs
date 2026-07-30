@@ -208,6 +208,8 @@ test("narrative route permits one atomic generation attempt and restores its val
       storedRecord.narrativeSelectionJson = selectionToStore
         ? JSON.stringify(selectionToStore)
         : null;
+      storedRecord.narrativeAttemptStatus = "completed";
+
     },
     claimInternalNotification: async () => "sent",
     finalizeInternalNotification: async () => {},
