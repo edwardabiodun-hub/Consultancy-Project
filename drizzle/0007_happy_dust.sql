@@ -1,0 +1,1 @@
+ALTER TABLE `assessment_records` ADD `narrative_selection_json` text;

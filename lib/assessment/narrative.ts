@@ -17,6 +17,9 @@ export type NarrativeBlockIds = {
 
 export type NarrativeModelInput = { allowedBlockIds: NarrativeBlockIds };
 export type NarrativeOutcome = { source: "ai" | "rules"; text: string };
+export type NarrativeGeneration = NarrativeOutcome & {
+  selection: NarrativeSelection | null;
+};
 
 const NARRATIVE_MODEL_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 8000;
@@ -101,10 +104,10 @@ const isSelectionShape = (value: unknown): value is NarrativeSelection => {
     && typeof candidate.limitationsId === "string";
 };
 
-export function resolveNarrativeSelection(
+export function resolveNarrativeOutcome(
   selection: unknown,
   result: AssessmentResult,
-): string | null {
+): NarrativeGeneration | null {
   if (!isSelectionShape(selection)) return null;
   const blocks = approvedBlocks(result);
   const observationIds = selection.observationIds;
@@ -117,14 +120,39 @@ export function resolveNarrativeSelection(
     || observationIds.some((id) => !blocks.observations.has(id))) {
     return null;
   }
-  return [
-    blocks.summaries.get(selection.summaryId),
-    ...observationIds.map((id) => blocks.observations.get(id)),
-    blocks.priorities.get(selection.priorityId),
-    blocks.limitations.get(selection.limitationsId),
+  const validatedSelection: NarrativeSelection = {
+    summaryId: selection.summaryId,
+    observationIds: [...observationIds],
+    priorityId: selection.priorityId,
+    limitationsId: selection.limitationsId,
+  };
+  const text = [
+    blocks.summaries.get(validatedSelection.summaryId),
+    ...validatedSelection.observationIds.map((id) => blocks.observations.get(id)),
+    blocks.priorities.get(validatedSelection.priorityId),
+    blocks.limitations.get(validatedSelection.limitationsId),
   ].filter((part): part is string => Boolean(part)).join(" ");
+  return { source: "ai", text, selection: validatedSelection };
 }
 
+export function resolveNarrativeSelection(
+  selection: unknown,
+  result: AssessmentResult,
+): string | null {
+  return resolveNarrativeOutcome(selection, result)?.text ?? null;
+}
+
+export function restoreNarrativeSelection(
+  selectionJson: string | null | undefined,
+  result: AssessmentResult,
+): NarrativeGeneration | null {
+  if (!selectionJson) return null;
+  try {
+    return resolveNarrativeOutcome(JSON.parse(selectionJson), result);
+  } catch {
+    return null;
+  }
+}
 export type CallModelConfig = {
   apiKey: string;
   model: string;
@@ -164,7 +192,6 @@ export async function callNarrativeModel(
                   items: { type: "string", enum: ids.observations },
                   minItems: 1,
                   maxItems: ids.observations.length,
-                  uniqueItems: true,
                 },
                 priorityId: { type: "string", enum: ids.priorities },
                 limitationsId: { type: "string", enum: ids.limitations },
@@ -199,8 +226,8 @@ type GenerateDependencies = {
 export async function generateValidatedNarrative(
   result: AssessmentResult,
   dependencies: Partial<GenerateDependencies> = {},
-): Promise<NarrativeOutcome> {
-  const fallback: NarrativeOutcome = { source: "rules", text: result.narrative.summary };
+): Promise<NarrativeGeneration> {
+  const fallback: NarrativeGeneration = { source: "rules", text: result.narrative.summary, selection: null };
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.ASSESSMENT_NARRATIVE_MODEL;
   if (!apiKey || !model) return fallback;
@@ -214,8 +241,7 @@ export async function generateValidatedNarrative(
         fetchImpl: dependencies.fetchImpl,
       },
     );
-    const text = resolveNarrativeSelection(selection, result);
-    return text ? { source: "ai", text } : fallback;
+    return resolveNarrativeOutcome(selection, result) ?? fallback;
   } catch {
     return fallback;
   }

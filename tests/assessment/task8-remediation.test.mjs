@@ -10,6 +10,7 @@ import { buildAssessmentResult } from "../../lib/assessment/result.ts";
 const projectRoot = new URL("../../", import.meta.url);
 const {
   buildNarrativeModelInput,
+  callNarrativeModel,
   generateValidatedNarrative,
   resolveNarrativeSelection,
 } = narrativeModule;
@@ -71,6 +72,51 @@ test("the model boundary contains only finite approved block IDs", () => {
   assert.doesNotMatch(serialized, /\b(?:50|100|owner_bottleneck|Avery|Example Operations)\b/);
 });
 
+test("the strict OpenAI request uses only supported closed-set array constraints", async () => {
+  let requestBody = null;
+  const input = {
+    allowedBlockIds: {
+      summaries: ["summary_developing_high"],
+      observations: ["observation_ownerIndependence_developing"],
+      priorities: ["priority_ownerIndependence"],
+      limitations: ["limitations_high_low"],
+    },
+  };
+
+  await callNarrativeModel(input, {
+    apiKey: "test-key",
+    model: "test-model",
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              summaryId: input.allowedBlockIds.summaries[0],
+              observationIds: input.allowedBlockIds.observations,
+              priorityId: input.allowedBlockIds.priorities[0],
+              limitationsId: input.allowedBlockIds.limitations[0],
+            }),
+          },
+        }],
+      }), { status: 200 });
+    },
+  });
+
+  assert.deepEqual(
+    requestBody.response_format.json_schema.schema.properties.observationIds,
+    {
+      type: "array",
+      items: {
+        type: "string",
+        enum: ["observation_ownerIndependence_developing"],
+      },
+      minItems: 1,
+      maxItems: 1,
+    },
+  );
+});
+
 test("closed-set resolution rejects unknown, duplicated, incompatible, and missing IDs", () => {
   const allowed = buildNarrativeModelInput(result).allowedBlockIds;
   const valid = {
@@ -116,7 +162,11 @@ test("validated narrative uses only local prose and falls back completely for an
         limitationsId: allowed.limitations[0],
       }),
     });
-    assert.deepEqual(fallback, { source: "rules", text: result.narrative.summary });
+    assert.deepEqual(fallback, {
+      source: "rules",
+      text: result.narrative.summary,
+      selection: null,
+    });
   } finally {
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previousKey;
@@ -125,11 +175,19 @@ test("validated narrative uses only local prose and falls back completely for an
   }
 });
 
-test("narrative route permits one atomic generation attempt and uses rules on retry", async () => {
+test("narrative route permits one atomic generation attempt and restores its validated selection on retry", async () => {
   let attempts = 0;
   let generations = 0;
+  const storedRecord = { ...record };
+  const selectedIds = buildNarrativeModelInput(result).allowedBlockIds;
+  const acceptedSelection = {
+    summaryId: selectedIds.summaries[0],
+    observationIds: selectedIds.observations.slice(0, 2),
+    priorityId: selectedIds.priorities[0],
+    limitationsId: selectedIds.limitations[0],
+  };
   const handler = createAssessmentNarrativeHandler({
-    findRecord: async () => record,
+    findRecord: async () => ({ ...storedRecord }),
     checkRateLimit: async () => true,
     checkGlobalRateLimit: async () => true,
     isNarrativeModelConfigured: () => true,
@@ -139,9 +197,18 @@ test("narrative route permits one atomic generation attempt and uses rules on re
     },
     generateNarrative: async () => {
       generations += 1;
-      return { source: "ai", text: "Locally approved narrative." };
+      return {
+        source: "ai",
+        text: resolveNarrativeSelection(acceptedSelection, result),
+        selection: acceptedSelection,
+      };
     },
-    updateNarrativeSource: async () => {},
+    updateNarrativeSource: async (_id, source, selectionToStore) => {
+      storedRecord.narrativeSource = source;
+      storedRecord.narrativeSelectionJson = selectionToStore
+        ? JSON.stringify(selectionToStore)
+        : null;
+    },
     claimInternalNotification: async () => "sent",
     finalizeInternalNotification: async () => {},
     sendInternalNotification: async () => ({ accepted: true }),
@@ -150,10 +217,9 @@ test("narrative route permits one atomic generation attempt and uses rules on re
   const first = await handler(request(), context);
   const second = await handler(request(), context);
   assert.equal((await first.json()).narrative.source, "ai");
-  assert.equal((await second.json()).narrative.source, "rules");
+  assert.equal((await second.json()).narrative.source, "ai");
   assert.equal(generations, 1);
 });
-
 test("global narrative circuit breaker prevents OpenAI while preserving rules output", async () => {
   let generations = 0;
   const handler = createAssessmentNarrativeHandler({

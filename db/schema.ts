@@ -55,6 +55,7 @@ export const assessmentRecords = sqliteTable("assessment_records", {
     .notNull()
     .default("pending"),
   narrativeAttemptedAt: text("narrative_attempted_at"),
+  narrativeSelectionJson: text("narrative_selection_json"),
   reportDeliveryStatus: text("report_delivery_status").notNull(),
   internalNotificationStatus: text("internal_notification_status")
     .notNull()

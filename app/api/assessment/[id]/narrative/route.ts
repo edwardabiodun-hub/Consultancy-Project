@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { and, eq, gt, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import type { assessmentRecords } from "../../../../../db/schema";
 import { toAssessmentRecord } from "../../../../../lib/assessment/record";
@@ -6,14 +6,18 @@ import { buildAssessmentResult } from "../../../../../lib/assessment/result";
 import { parseAssessmentPayload } from "../../../../../lib/assessment/validation";
 import {
   generateValidatedNarrative,
+  resolveNarrativeOutcome,
+  restoreNarrativeSelection,
+  type NarrativeGeneration,
   type NarrativeOutcome,
+  type NarrativeSelection,
 } from "../../../../../lib/assessment/narrative";
 import {
   fingerprintInternalAssessmentEmail,
   sendInternalAssessmentEmail,
 } from "../../../../../lib/email/internal-assessment";
 
- type AssessmentRecord = typeof assessmentRecords.$inferSelect;
+type AssessmentRecord = typeof assessmentRecords.$inferSelect;
 type RouteContext = { params: Promise<{ id: string }> };
 type NotificationClaim = "claimed" | "sent" | "busy";
 type NotificationOutcome = "sent" | "failed" | "indeterminate";
@@ -26,7 +30,11 @@ type HandlerDependencies = {
   isNarrativeModelConfigured: () => boolean;
   claimNarrativeAttempt: (id: string) => Promise<NarrativeAttemptClaim>;
   generateNarrative: typeof generateValidatedNarrative;
-  updateNarrativeSource: (id: string, source: NarrativeOutcome["source"]) => Promise<void>;
+  updateNarrativeSource: (
+    id: string,
+    source: NarrativeOutcome["source"],
+    selection: NarrativeSelection | null,
+  ) => Promise<void>;
   fingerprintInternalNotification: (input: NotificationInput) => Promise<string>;
   claimInternalNotification: (id: string, payloadHash: string) => Promise<NotificationClaim>;
   finalizeInternalNotification: (id: string, outcome: NotificationOutcome) => Promise<void>;
@@ -67,11 +75,18 @@ const checkGlobalNarrativeRateLimit = async (): Promise<boolean> => {
   return (await limiter.limit({ key: "narrative-service" })).success;
 };
 
-const updateStoredNarrativeSource = async (id: string, source: NarrativeOutcome["source"]) => {
+const updateStoredNarrativeSource = async (
+  id: string,
+  source: NarrativeOutcome["source"],
+  selection: NarrativeSelection | null,
+) => {
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"), import("../../../../../db/schema"),
   ]);
-  await getDb().update(assessmentRecords).set({ narrativeSource: source }).where(eq(assessmentRecords.id, id));
+  await getDb().update(assessmentRecords).set({
+    narrativeSource: source,
+    narrativeSelectionJson: selection ? JSON.stringify(selection) : null,
+  }).where(eq(assessmentRecords.id, id));
 };
 
 const changedRows = (result: unknown): number =>
@@ -235,33 +250,50 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
       return unavailable();
     }
 
-    let serviceBudgetAvailable = false;
-    try {
-      serviceBudgetAvailable = await checkGlobalRateLimit();
-    } catch {
-      serviceBudgetAvailable = false;
-    }
+    const rulesNarrative: NarrativeGeneration = {
+      source: "rules",
+      text: result.narrative.summary,
+      selection: null,
+    };
+    const restoredNarrative = record.narrativeSource === "ai"
+      ? restoreNarrativeSelection(record.narrativeSelectionJson, result)
+      : null;
+    let narrativeState = restoredNarrative ?? rulesNarrative;
 
-    let narrative: NarrativeOutcome = { source: "rules", text: result.narrative.summary };
-    if (serviceBudgetAvailable && isNarrativeModelConfigured()) {
+    if (!restoredNarrative && isNarrativeModelConfigured()) {
+      let openAiBudgetAvailable = false;
       try {
-        if ((await claimNarrativeAttempt(id)) === "claimed") {
-          narrative = await generateNarrative(result);
-        }
+        openAiBudgetAvailable = await checkGlobalRateLimit();
       } catch {
-        narrative = { source: "rules", text: result.narrative.summary };
+        openAiBudgetAvailable = false;
+      }
+      if (openAiBudgetAvailable) {
+        try {
+          if ((await claimNarrativeAttempt(id)) === "claimed") {
+            const generated = await generateNarrative(result);
+            narrativeState = generated.source === "ai"
+              ? resolveNarrativeOutcome(generated.selection, result) ?? rulesNarrative
+              : rulesNarrative;
+          }
+        } catch {
+          narrativeState = rulesNarrative;
+        }
       }
     }
 
+    const narrative: NarrativeOutcome = {
+      source: narrativeState.source,
+      text: narrativeState.text,
+    };
     let persistenceAvailable = true;
     try {
-      await updateNarrativeSource(id, narrative.source);
+      await updateNarrativeSource(id, narrative.source, narrativeState.selection);
     } catch {
       persistenceAvailable = false;
     }
 
     let internalNotificationAccepted = false;
-    if (serviceBudgetAvailable && persistenceAvailable && parsed.lead) {
+    if (persistenceAvailable && parsed.lead) {
       const notificationInput: NotificationInput = {
         assessmentId: id,
         lead: {
