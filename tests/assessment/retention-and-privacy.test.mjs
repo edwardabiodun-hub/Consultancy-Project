@@ -65,24 +65,27 @@ test("Cloudflare configuration schedules daily retention cleanup and rate-limits
   assert.match(worker, /runAssessmentRetentionCleanup/);
 });
 
-test("privacy, consent, and operations docs disclose internal narrative email and 90-day retention", async () => {
+test("privacy, consent, and operations docs disclose internal narrative email and bounded retention", async () => {
   const [privacy, gate, readme] = await Promise.all([
     readFile(new URL("app/privacy/page.tsx", projectRoot), "utf8"),
     readFile(new URL("app/assessment/ContactGate.tsx", projectRoot), "utf8"),
     readFile(new URL("README.md", projectRoot), "utf8"),
   ]);
   for (const source of [privacy, readme]) {
-    assert.match(source, /90 days/i);
+    assert.match(source, /90-day period/i);
+    assert.match(source, /normally within 24 hours/i);
+    assert.doesNotMatch(source, /up to 90 days/i);
     assert.match(source, /03:17 UTC/i);
     assert.match(source, /info@runrategroup\.com/i);
     assert.match(source, /name.*email.*company.*role/is);
     assert.match(source, /OpenAI.*(?:no|not).*identity.*raw answers/is);
-    assert.match(source, /OpenAI.*scores.*confidence.*risk codes.*priorities.*capacity/is);
+    assert.match(source, /OpenAI.*candidate block IDs/is);
+    assert.match(source, /OpenAI.*(?:no|not).*prose/is);
     assert.match(source, /narrative prose.*not.*D1/is);
     assert.match(source, /mailbox/is);
   }
   assert.match(gate, /internal assessment notification/i);
-  assert.match(gate, /90 days/i);
-  assert.match(readme, /0005_striped_wilson_fisk\.sql/i);
+  assert.match(gate, /90-day period/i);
+  assert.match(readme, /0006_lethal_scarlet_witch\.sql/i);
   assert.match(readme, /role.*null.*narrative/i);
 });

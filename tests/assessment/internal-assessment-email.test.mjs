@@ -52,7 +52,7 @@ test("buildInternalAssessmentEmail includes the approved assessment summary and 
     result.score.confidence.level,
     result.capacity.confidence,
     result.interpretation.route,
-    "AI-generated and validated",
+    "AI-selected and rules-validated",
     input.narrative.text,
   ]) {
     assert.ok(email.html.includes(value), `HTML should include ${value}`);

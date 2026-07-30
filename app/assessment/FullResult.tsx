@@ -66,7 +66,7 @@ export function FullResult({
   const capacity = result.capacity;
   const displayedNarrative = narrative?.text ?? result.narrative.summary;
   const narrativeLabel =
-    narrative?.source === "ai" ? "AI-generated and validated" : "Rules-based";
+    narrative?.source === "ai" ? "AI-selected and rules-validated" : "Rules-based";
 
   // Non-identifying context shared by every event fired from this rendered
   // result: which assessment (when persisted) and the deterministic

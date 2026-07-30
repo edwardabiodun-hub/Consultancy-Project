@@ -6,7 +6,6 @@ import {
   type PDFPage,
   type RGB,
 } from "pdf-lib";
-import { QUESTION_BANK } from "../assessment/questions";
 import type { ComponentId } from "../assessment/types";
 
 export type AssessmentReportRecord = {
@@ -71,8 +70,6 @@ type Finding = {
   code: string;
   kind: "risk" | "watchpoint" | "strength";
   component: ComponentId | null;
-  evidenceQuestionId: string | null;
-  evidenceValue: number | "unknown" | null;
 };
 
 type ComponentDefinition = {
@@ -456,21 +453,10 @@ const formatDate = (value: string) => {
   return `${months[Number(match[2]) - 1]} ${Number(match[3])}, ${match[1]}`;
 };
 
-const evidenceSummary = (finding: Finding) => {
-  if (!finding.evidenceQuestionId) {
-    return "The retained record indicates a measurement gap; question-level evidence is unavailable.";
-  }
-  const question = QUESTION_BANK.find(
-    (candidate) => candidate.id === finding.evidenceQuestionId,
-  );
-  const option = question?.options.find(
-    (candidate) => candidate.value === finding.evidenceValue,
-  );
-  if (!question || !option) {
-    return "The retained controlled evidence code could not be matched to the approved question bank.";
-  }
-  return `Self-reported: ${question.prompt} ${option.label}.`;
-};
+const evidenceSummary = (finding: Finding) =>
+  finding.component
+    ? `Normalized ${finding.kind} finding for ${COMPONENTS[finding.component].label}; question-level responses are not retained.`
+    : `Normalized ${finding.kind} finding; question-level responses are not retained.`;
 
 const findingLabel = (finding: Finding) =>
   FINDING_LABELS[finding.code] ??

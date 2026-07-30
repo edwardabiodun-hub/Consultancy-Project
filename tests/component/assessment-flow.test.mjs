@@ -597,6 +597,48 @@ test("a structured 422 returns to precision without rendering a result or server
   );
 });
 
+test("a calculation 429 preserves exact capacity inputs and shows a retry-later message", async () => {
+  globalThis.fetch = async (input) => {
+    if (!String(input).includes("/api/assessment/calculate")) {
+      return Response.json({ ok: true }, { status: 202 });
+    }
+    return Response.json(
+      { ok: false, error: "Too many assessment requests." },
+      { status: 429, headers: { "retry-after": "75" } },
+    );
+  };
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await submitLead(user);
+
+  const owner = screen.getByRole("group", { name: "Owner intervention" });
+  const reporting = screen.getByRole("group", { name: "Team reporting and reconciliation" });
+  for (const [group, values] of [
+    [owner, ["2", "12", "100"]],
+    [reporting, ["3", "4", "12", "50"]],
+  ]) {
+    const fields = within(group).getAllByRole("spinbutton");
+    for (let index = 0; index < values.length; index += 1) {
+      await user.type(fields[index], values[index]);
+    }
+  }
+  await user.click(screen.getByRole("button", { name: "Calculate with exact inputs" }));
+
+  await screen.findByRole("heading", { name: "Improve the capacity estimate." });
+  assert.match(screen.getByRole("alert").textContent, /answers are saved.*75 seconds.*try again/i);
+  assert.deepEqual(
+    within(screen.getByRole("group", { name: "Owner intervention" }))
+      .getAllByRole("spinbutton").map((field) => field.value),
+    ["2", "12", "100"],
+  );
+  assert.deepEqual(
+    within(screen.getByRole("group", { name: "Team reporting and reconciliation" }))
+      .getAllByRole("spinbutton").map((field) => field.value),
+    ["3", "4", "12", "50"],
+  );
+  assert.doesNotMatch(document.body.textContent, /temporarily unavailable/i);
+});
 test("a 5xx response retains the valid local result with the outage warning", async () => {
   globalThis.fetch = async () =>
     Response.json({ ok: false }, { status: 503 });

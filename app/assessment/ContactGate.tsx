@@ -195,7 +195,7 @@ export function ContactGate({
               }
             />
             <span>
-              I consent to generate and email my assessment report and send an internal assessment notification to RunRate Advisory using these details. Assessment records and the notification are retained for up to 90 days.
+              I consent to generate and email my assessment report and send an internal assessment notification to RunRate Advisory using these details. Assessment records are retained for a 90-day period and removed by the next daily cleanup, normally within 24 hours after the 90-day mark. The notification mailbox follows the same operational policy.
             </span>
           </label>
           {showError("reportConsent") && (
@@ -216,7 +216,7 @@ export function ContactGate({
           </label>
           <p>
             Phone is optional. Marketing updates are optional and independent from report
-            delivery. Only compact result and delivery information will be retained.
+            delivery. The compact D1 record includes your contact, consent, result, and delivery fields; the internal mailbox retains the approved narrative notification.
           </p>
         </div>
 

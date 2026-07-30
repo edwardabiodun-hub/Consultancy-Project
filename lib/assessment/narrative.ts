@@ -1,113 +1,128 @@
 import type { AssessmentResult } from "./result";
 import type { ComponentId } from "./types";
-import {
-  isNarrativeDraftShape,
-  validateNarrative,
-  type NarrativeDraft,
-} from "./narrative-validation";
 
-export type { NarrativeDraft } from "./narrative-validation";
-
-/**
- * Everything the model is allowed to see. Deliberately excludes any
- * free-text or contact data; every value here is already a deterministic,
- * bounded output of `buildAssessmentResult`.
- */
-export type NarrativeModelInput = {
-  overallScore: number | null;
-  scoreCategory: AssessmentResult["score"]["category"];
-  components: Record<
-    ComponentId,
-    { score: number | null; category: AssessmentResult["score"]["category"] }
-  >;
-  scoreConfidence: AssessmentResult["score"]["confidence"]["level"];
-  impactConfidence: AssessmentResult["capacity"]["confidence"];
-  capacity: {
-    estimateType: AssessmentResult["capacity"]["estimateType"];
-    inputSource: AssessmentResult["capacity"]["inputSource"];
-    recoverableHours: AssessmentResult["capacity"]["recoverableHours"];
-    annualValue: AssessmentResult["capacity"]["annualValue"];
-  };
-  risks: Array<{ code: string; kind: string; component: ComponentId | null }>;
-  priorities: Array<{ component: ComponentId; title: string; action: string; indicator: string }>;
-  route: AssessmentResult["interpretation"]["route"];
+export type NarrativeSelection = {
+  summaryId: string;
+  observationIds: string[];
+  priorityId: string;
+  limitationsId: string;
 };
 
+export type NarrativeBlockIds = {
+  summaries: string[];
+  observations: string[];
+  priorities: string[];
+  limitations: string[];
+};
+
+export type NarrativeModelInput = { allowedBlockIds: NarrativeBlockIds };
 export type NarrativeOutcome = { source: "ai" | "rules"; text: string };
 
 const NARRATIVE_MODEL_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 8000;
-
 const SYSTEM_PROMPT = [
-  "You are drafting a short narrative for a deterministic Business Independence Assessment result.",
-  "You are given only bounded, already-computed scores, capacity figures, normalized risk codes and finding kinds, and controlled priority text.",
-  "Do not write numerals, currency, percentages, ranges, counts, durations, or number words. Numeric results are rendered separately by deterministic code.",
-  "Never reference a risk code, benchmark, or comparison that is not provided.",
-  "Keep the summary, component observations, and limitations descriptive. Never use directive or recommendation language such as should, must, recommend, hire, buy, replace, or implement.",
-  "Never promise savings, revenue, valuation, or guaranteed results.",
-  "Use estimate type only to describe certainty; do not quote the numeric figures.",
-  "The limitations sentence must state the result is self-reported and not an audit.",
-  "Never propose a call to action other than the one implied by the provided route.",
-  'Return one provided priority component as priorityId. Copy that priority as: "Title: Action Indicator: Indicator." with no added recommendation.',
-  'Respond with strict JSON matching: { "summary": string, "componentObservations": [{ "component": string, "observation": string }], "priorityId": string, "priorityExplanation": string, "limitations": string }.',
+  "Select identifiers only from the supplied approved sets.",
+  "Do not write, alter, summarize, or add prose.",
+  "Return strict JSON with summaryId, observationIds, priorityId, and limitationsId.",
 ].join(" ");
 
-/**
- * Builds a safe, bounded model input exclusively from deterministic derived
- * outputs. No respondent identity, categorical context answers, question
- * prompts, selected labels, raw scored answers, or free text are included.
- */
+const CATEGORY_TEXT: Record<AssessmentResult["score"]["category"], string> = {
+  strong: "The self-reported result indicates strong operating independence, with management systems carrying much of the routine workload.",
+  emerging: "The self-reported result indicates emerging operating independence, with a focused set of dependencies still requiring management attention.",
+  developing: "The self-reported result indicates developing operating independence, with several recurring dependencies still concentrated in people rather than systems.",
+  highDependency: "The self-reported result indicates high dependency, with important decisions or operating work still concentrated in the owner.",
+  incomplete: "The self-reported result is incomplete because the available evidence does not support a full operating-independence interpretation.",
+};
+
+const COMPONENT_NAMES: Record<ComponentId, string> = {
+  ownerIndependence: "Owner independence",
+  operatingSystem: "Operating-system maturity",
+  informationVisibility: "Information visibility",
+};
+
+const CATEGORY_OBSERVATIONS: Record<AssessmentResult["score"]["category"], string> = {
+  strong: "is a relative strength in the current self-reported evidence.",
+  emerging: "shows an emerging system-led pattern with some remaining dependency.",
+  developing: "remains a watchpoint where greater consistency would reduce dependency.",
+  highDependency: "is a material dependency in the current self-reported evidence.",
+  incomplete: "cannot yet be interpreted reliably from the available evidence.",
+};
+
+const confidenceLabel = (value: string): string => value.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+
+const approvedBlocks = (result: AssessmentResult) => {
+  const summaryId = `summary_${result.score.category}_${result.score.confidence.level}`;
+  const limitationsId = `limitations_${result.score.confidence.level}_${result.capacity.confidence}`;
+  const summaries = new Map([[summaryId,
+    `${CATEGORY_TEXT[result.score.category]} Score confidence is ${confidenceLabel(result.score.confidence.level)}.`
+  ]]);
+  const observations = new Map<string, string>();
+  for (const component of Object.keys(COMPONENT_NAMES) as ComponentId[]) {
+    const category = result.score.components[component]?.category ?? "incomplete";
+    observations.set(
+      `observation_${component}_${category}`,
+      `${COMPONENT_NAMES[component]} ${CATEGORY_OBSERVATIONS[category]}`,
+    );
+  }
+  const priorities = new Map<string, string>();
+  for (const priority of result.interpretation.priorities) {
+    priorities.set(
+      `priority_${priority.component}`,
+      `${priority.title}: ${priority.action} Indicator: ${priority.indicator}.`,
+    );
+  }
+  const limitations = new Map([[limitationsId,
+    `This interpretation is based on self-reported information and is not an audit. Impact confidence is ${confidenceLabel(result.capacity.confidence)}; operating causes and financial effects require validation.`
+  ]]);
+  return { summaries, observations, priorities, limitations };
+};
+
 export function buildNarrativeModelInput(result: AssessmentResult): NarrativeModelInput {
+  const blocks = approvedBlocks(result);
   return {
-    overallScore: result.score.overall,
-    scoreCategory: result.score.category,
-    components: {
-      ownerIndependence: {
-        score: result.score.components.ownerIndependence?.score ?? null,
-        category: result.score.components.ownerIndependence?.category ?? "incomplete",
-      },
-      operatingSystem: {
-        score: result.score.components.operatingSystem?.score ?? null,
-        category: result.score.components.operatingSystem?.category ?? "incomplete",
-      },
-      informationVisibility: {
-        score: result.score.components.informationVisibility?.score ?? null,
-        category: result.score.components.informationVisibility?.category ?? "incomplete",
-      },
+    allowedBlockIds: {
+      summaries: [...blocks.summaries.keys()],
+      observations: [...blocks.observations.keys()],
+      priorities: [...blocks.priorities.keys()],
+      limitations: [...blocks.limitations.keys()],
     },
-    scoreConfidence: result.score.confidence.level,
-    impactConfidence: result.capacity.confidence,
-    capacity: {
-      estimateType: result.capacity.estimateType,
-      inputSource: result.capacity.inputSource,
-      recoverableHours: result.capacity.recoverableHours,
-      annualValue: result.capacity.annualValue,
-    },
-    risks: result.risks.map((risk) => ({
-      code: risk.code,
-      kind: risk.kind,
-      component: risk.component,
-    })),
-    priorities: result.interpretation.priorities.map((priority) => ({
-      component: priority.component,
-      title: priority.title,
-      action: priority.action,
-      indicator: priority.indicator,
-    })),
-    route: result.interpretation.route,
   };
 }
 
-/** Flattens the four-field `NarrativeDraft` contract into the single display string the API returns. */
-export function flattenNarrativeDraft(draft: NarrativeDraft): string {
-  const observations = draft.componentObservations
-    .map((entry) => entry.observation.trim())
-    .filter((observation) => observation.length > 0)
-    .join(" ");
-  return [draft.summary, observations, draft.priorityExplanation, draft.limitations]
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-    .join(" ");
+const isSelectionShape = (value: unknown): value is NarrativeSelection => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  const expectedKeys = ["limitationsId", "observationIds", "priorityId", "summaryId"];
+  if (Object.keys(candidate).sort().join(",") !== expectedKeys.join(",")) return false;
+  return typeof candidate.summaryId === "string"
+    && Array.isArray(candidate.observationIds)
+    && candidate.observationIds.every((id) => typeof id === "string")
+    && typeof candidate.priorityId === "string"
+    && typeof candidate.limitationsId === "string";
+};
+
+export function resolveNarrativeSelection(
+  selection: unknown,
+  result: AssessmentResult,
+): string | null {
+  if (!isSelectionShape(selection)) return null;
+  const blocks = approvedBlocks(result);
+  const observationIds = selection.observationIds;
+  if (!blocks.summaries.has(selection.summaryId)
+    || !blocks.priorities.has(selection.priorityId)
+    || !blocks.limitations.has(selection.limitationsId)
+    || observationIds.length === 0
+    || observationIds.length > blocks.observations.size
+    || new Set(observationIds).size !== observationIds.length
+    || observationIds.some((id) => !blocks.observations.has(id))) {
+    return null;
+  }
+  return [
+    blocks.summaries.get(selection.summaryId),
+    ...observationIds.map((id) => blocks.observations.get(id)),
+    blocks.priorities.get(selection.priorityId),
+    blocks.limitations.get(selection.limitationsId),
+  ].filter((part): part is string => Boolean(part)).join(" ");
 }
 
 export type CallModelConfig = {
@@ -117,13 +132,6 @@ export type CallModelConfig = {
   fetchImpl?: typeof fetch;
 };
 
-/**
- * Default model call: a direct `fetch` against the Chat Completions API with
- * a short, abortable timeout (matching this project's edge-function
- * constraints and its existing direct-`fetch` pattern for third-party HTTP
- * APIs, e.g. Resend in the deliver route). Throws on any failure so the
- * caller's single catch-all can fall back to the rules narrative.
- */
 export async function callNarrativeModel(
   input: NarrativeModelInput,
   config: CallModelConfig,
@@ -131,6 +139,7 @@ export async function callNarrativeModel(
   const { apiKey, model, timeoutMs = DEFAULT_TIMEOUT_MS, fetchImpl = fetch } = config;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const ids = input.allowedBlockIds;
   try {
     const response = await fetchImpl(NARRATIVE_MODEL_ENDPOINT, {
       method: "POST",
@@ -140,7 +149,30 @@ export async function callNarrativeModel(
       },
       body: JSON.stringify({
         model,
-        response_format: { type: "json_object" },
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "assessment_narrative_selection",
+            strict: true,
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                summaryId: { type: "string", enum: ids.summaries },
+                observationIds: {
+                  type: "array",
+                  items: { type: "string", enum: ids.observations },
+                  minItems: 1,
+                  maxItems: ids.observations.length,
+                  uniqueItems: true,
+                },
+                priorityId: { type: "string", enum: ids.priorities },
+                limitationsId: { type: "string", enum: ids.limitations },
+              },
+              required: ["summaryId", "observationIds", "priorityId", "limitationsId"],
+            },
+          },
+        },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: JSON.stringify(input) },
@@ -148,16 +180,10 @@ export async function callNarrativeModel(
       }),
       signal: controller.signal,
     });
-    if (!response.ok) {
-      throw new Error(`Narrative model request failed with status ${response.status}`);
-    }
-    const body = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const content = body?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      throw new Error("Narrative model response is missing message content");
-    }
+    if (!response.ok) throw new Error(`Narrative model request failed with status ${response.status}`);
+    const body = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const content = body.choices?.[0]?.message?.content;
+    if (typeof content !== "string") throw new Error("Narrative model response is missing message content");
     return JSON.parse(content);
   } finally {
     clearTimeout(timer);
@@ -170,44 +196,27 @@ type GenerateDependencies = {
   fetchImpl: typeof fetch;
 };
 
-/**
- * Produces a validated narrative for an already-computed `AssessmentResult`.
- * Falls back to `{ source: "rules", text: result.narrative.summary }` -
- * the complete, already-tested rules narrative - whenever:
- *  - the model is unconfigured (missing API key or model name);
- *  - the model call throws, times out, or is aborted;
- *  - the model response is not parseable JSON;
- *  - the parsed JSON does not match the `NarrativeDraft` contract; or
- *  - the draft fails deterministic policy validation.
- * Never throws.
- */
 export async function generateValidatedNarrative(
   result: AssessmentResult,
   dependencies: Partial<GenerateDependencies> = {},
 ): Promise<NarrativeOutcome> {
-  const rulesFallback: NarrativeOutcome = { source: "rules", text: result.narrative.summary };
-
+  const fallback: NarrativeOutcome = { source: "rules", text: result.narrative.summary };
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.ASSESSMENT_NARRATIVE_MODEL;
-  if (!apiKey || !model) return rulesFallback;
-
-  const requestDraft = dependencies.callModel ?? callNarrativeModel;
-  const modelInput = buildNarrativeModelInput(result);
-
-  let rawDraft: unknown;
+  if (!apiKey || !model) return fallback;
   try {
-    rawDraft = await requestDraft(modelInput, {
-      apiKey,
-      model,
-      timeoutMs: dependencies.timeoutMs,
-      fetchImpl: dependencies.fetchImpl,
-    });
+    const selection = await (dependencies.callModel ?? callNarrativeModel)(
+      buildNarrativeModelInput(result),
+      {
+        apiKey,
+        model,
+        timeoutMs: dependencies.timeoutMs,
+        fetchImpl: dependencies.fetchImpl,
+      },
+    );
+    const text = resolveNarrativeSelection(selection, result);
+    return text ? { source: "ai", text } : fallback;
   } catch {
-    return rulesFallback;
+    return fallback;
   }
-
-  if (!isNarrativeDraftShape(rawDraft)) return rulesFallback;
-  if (!validateNarrative(rawDraft, result)) return rulesFallback;
-
-  return { source: "ai", text: flattenNarrativeDraft(rawDraft) };
 }

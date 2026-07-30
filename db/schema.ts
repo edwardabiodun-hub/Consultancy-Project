@@ -51,12 +51,18 @@ export const assessmentRecords = sqliteTable("assessment_records", {
   priorityIdsJson: text("priority_ids_json").notNull(),
   leadRoute: text("lead_route").notNull(),
   narrativeSource: text("narrative_source").notNull(),
+  narrativeAttemptStatus: text("narrative_attempt_status")
+    .notNull()
+    .default("pending"),
+  narrativeAttemptedAt: text("narrative_attempted_at"),
   reportDeliveryStatus: text("report_delivery_status").notNull(),
   internalNotificationStatus: text("internal_notification_status")
     .notNull()
     .default("pending"),
   internalNotificationClaimedAt: text("internal_notification_claimed_at"),
+  internalNotificationFirstAttemptAt: text("internal_notification_first_attempt_at"),
   internalNotificationSentAt: text("internal_notification_sent_at"),
+  internalNotificationPayloadHash: text("internal_notification_payload_hash"),
 });
 
 // Privacy-conscious product analytics for the assessment funnel. Only an

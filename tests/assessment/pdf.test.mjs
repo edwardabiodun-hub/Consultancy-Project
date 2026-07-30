@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { inflateSync } from "node:zlib";
 import test from "node:test";
-import { PDFDocument } from "pdf-lib";
+import { decodePDFRawStream, PDFArray, PDFDocument, PDFRawStream } from "pdf-lib";
 import { calculateCapacity } from "../../lib/assessment/capacity.ts";
 import {
   buildAssessmentPdf,
@@ -42,22 +41,16 @@ const baseRecord = {
       code: "owner_bottleneck",
       kind: "risk",
       component: "ownerIndependence",
-      evidenceQuestionId: "criticalDecisions",
-      evidenceValue: 25,
     },
     {
       code: "operating_system_watchpoint",
       kind: "watchpoint",
       component: "operatingSystem",
-      evidenceQuestionId: "workflowDocumentation",
-      evidenceValue: 50,
     },
     {
       code: "information_visibility_strength",
       kind: "strength",
       component: "informationVisibility",
-      evidenceQuestionId: "kpiAvailability",
-      evidenceValue: 75,
     },
   ]),
   capacityAssumptionCodesJson: JSON.stringify([
@@ -76,23 +69,6 @@ const baseRecord = {
   narrativeSource: "rules",
 };
 
-const decodeStreams = (bytes) => {
-  const source = Buffer.from(bytes).toString("latin1");
-  const streams = [];
-  const pattern = /stream\r?\n([\s\S]*?)endstream/g;
-  for (const match of source.matchAll(pattern)) {
-    const raw = Buffer.from(match[1].replace(/\r?\n$/, ""), "latin1");
-    let decoded = raw.toString("latin1");
-    try {
-      decoded = inflateSync(raw).toString("latin1");
-    } catch {
-      // Non-Flate streams are already readable.
-    }
-    streams.push(decoded);
-  }
-  return streams;
-};
-
 const extractText = (stream) =>
   [...stream.matchAll(/<([0-9A-Fa-f]+)>\s*Tj/g)]
     .map((match) => Buffer.from(match[1], "hex").toString("latin1"))
@@ -101,10 +77,20 @@ const extractText = (stream) =>
 const inspectPdf = async (record) => {
   const bytes = await buildAssessmentPdf(record);
   const reopened = await PDFDocument.load(bytes);
-  const streams = decodeStreams(bytes);
-  const pageStreams = streams.filter(
-    (stream) => stream.includes(" Tj") && stream.includes(" Tm"),
-  );
+  const pageStreams = reopened.getPages().map((page) => {
+    const contents = page.node.Contents();
+    const references = contents instanceof PDFArray
+      ? contents.asArray()
+      : contents
+        ? [contents]
+        : [];
+    return references.map((reference) => {
+      const stream = reopened.context.lookup(reference);
+      return stream instanceof PDFRawStream
+        ? Buffer.from(decodePDFRawStream(stream).decode()).toString("latin1")
+        : "";
+    }).join("\n");
+  });
   return {
     bytes,
     pageCount: reopened.getPageCount(),
@@ -448,10 +434,10 @@ test("component claims are gated by matching controlled finding kinds", async ()
   const information = page.slice(page.indexOf("Information visibility:"));
 
   assert.match(owner, /No controlled strength supported by the compact record/i);
-  assert.match(owner, /Controlled constraint: Self-reported:/i);
+  assert.match(owner, /Controlled constraint: Normalized (?:risk|watchpoint) finding/i);
   assert.match(operating, /No controlled strength supported by the compact record/i);
-  assert.match(operating, /Controlled constraint: Self-reported:/i);
-  assert.match(information, /Controlled strength: Self-reported:/i);
+  assert.match(operating, /Controlled constraint: Normalized (?:risk|watchpoint) finding/i);
+  assert.match(information, /Controlled strength: Normalized strength finding/i);
   assert.match(
     information,
     /No controlled constraint supported by the compact record/i,
@@ -499,17 +485,11 @@ test("risk profile preserves risk, watchpoint, and strength semantics", async ()
       {
         code: "owner_independence_strength",
         kind: "strength",
-        component: "ownerIndependence",
-        evidenceQuestionId: "criticalDecisions",
-        evidenceValue: 100,
-      },
+        component: "ownerIndependence",      },
       {
         code: "operating_system_watchpoint",
         kind: "watchpoint",
-        component: "operatingSystem",
-        evidenceQuestionId: "workflowDocumentation",
-        evidenceValue: 75,
-      },
+        component: "operatingSystem",      },
     ]),
   });
   assert.match(

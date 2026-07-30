@@ -1,4 +1,4 @@
-﻿import type { NarrativeOutcome } from "../assessment/narrative";
+import type { NarrativeOutcome } from "../assessment/narrative";
 import type { AssessmentResult } from "../assessment/result";
 
 export type InternalAssessmentEmailInput = {
@@ -37,7 +37,7 @@ export function buildInternalAssessmentEmail(
 ): { subject: string; html: string; idempotencyKey: string } {
   const sourceLabel =
     input.narrative.source === "ai"
-      ? "AI-generated and validated"
+      ? "AI-selected and rules-validated"
       : "Rules fallback";
   const idempotencyKey = `assessment-narrative-${input.assessmentId}`;
   const components = Object.entries(componentLabels)
@@ -78,6 +78,15 @@ export function buildInternalAssessmentEmail(
   };
 }
 
+export async function fingerprintInternalAssessmentEmail(
+  input: InternalAssessmentEmailInput,
+): Promise<string> {
+  const encoded = new TextEncoder().encode(JSON.stringify(input));
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 export async function sendInternalAssessmentEmail(
   input: InternalAssessmentEmailInput,
   config: EmailConfig = {},

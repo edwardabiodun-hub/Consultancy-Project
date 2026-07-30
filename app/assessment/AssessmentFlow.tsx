@@ -370,6 +370,20 @@ export function AssessmentFlow() {
           }),
           new Promise((resolve) => window.setTimeout(resolve, 50)),
         ]);
+        if (response.status === 429) {
+          if (!active) return;
+          const retryAfterValue = Number.parseInt(response.headers.get("retry-after") ?? "60", 10);
+          const retryAfterSeconds = Number.isFinite(retryAfterValue)
+            ? Math.min(Math.max(retryAfterValue, 1), 3600)
+            : 60;
+          setServerResult(null);
+          setDeliveryUnavailable(false);
+          setApiValidationError(
+            `Too many assessment requests. Your answers are saved. Please wait about ${retryAfterSeconds} seconds and try again.`,
+          );
+          setScreen("precision");
+          return;
+        }
         if (!response.ok && response.status < 500) {
           const rejected = (await response.json().catch(() => null)) as {
             errors?: unknown;

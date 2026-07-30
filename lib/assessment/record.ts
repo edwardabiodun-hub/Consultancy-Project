@@ -59,8 +59,6 @@ export function toAssessmentRecord({
         code: finding.code,
         kind: finding.kind,
         component: finding.component,
-        evidenceQuestionId: finding.evidenceQuestionId,
-        evidenceValue: finding.evidenceValue,
       })),
     ),
     capacityAssumptionCodesJson: JSON.stringify(
@@ -79,11 +77,15 @@ export function toAssessmentRecord({
     ),
     leadRoute: result.interpretation.route,
     narrativeSource: result.narrative.source,
+    narrativeAttemptStatus: "pending" as const,
+    narrativeAttemptedAt: null,
     reportDeliveryStatus: lead?.reportConsent
       ? ("pending" as const)
       : ("not_requested" as const),
     internalNotificationStatus: "pending" as const,
     internalNotificationClaimedAt: null,
+    internalNotificationFirstAttemptAt: null,
     internalNotificationSentAt: null,
+    internalNotificationPayloadHash: null,
   };
 }

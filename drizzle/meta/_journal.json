@@ -36,6 +36,13 @@
       "when": 1785368922540,
       "tag": "0005_striped_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785386454658,
+      "tag": "0006_lethal_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

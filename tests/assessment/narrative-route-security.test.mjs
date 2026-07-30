@@ -45,6 +45,7 @@ const context = { params: Promise.resolve({ id: assessmentId }) };
 const dependencies = (overrides = {}) => ({
   findRecord: async () => record,
   checkRateLimit: async () => true,
+  checkGlobalRateLimit: async () => true,
   generateNarrative: async () => ({ source: "rules", text: "Rules narrative." }),
   updateNarrativeSource: async () => {},
   claimInternalNotification: async () => "claimed",

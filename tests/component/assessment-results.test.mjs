@@ -551,7 +551,7 @@ test("full result identifies validated AI narrative text without attributing sco
   render(React.createElement(FullResult, { result, assessmentId: "8d7b76ca-86bf-46a6-88f4-42b6dfecd159", persistenceAvailable: true, narrative: { source: "ai", text: "Your operating evidence supports a focused 90-day plan." } }));
   const interpretation = screen.getByRole("heading", { name: "Executive interpretation" }).parentElement;
   assert.match(interpretation.textContent, /Your operating evidence supports a focused 90-day plan\./);
-  assert.match(interpretation.textContent, /AI-generated and validated/);
+  assert.match(interpretation.textContent, /AI-selected and rules-validated/);
 });
 
 test("full result identifies supplied rules fallback narrative text", () => {

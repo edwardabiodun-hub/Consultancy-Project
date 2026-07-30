@@ -35,6 +35,11 @@
       "name": "ASSESSMENT_CALCULATION_RATE_LIMITER",
       "namespace_id": "1002",
       "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "NARRATIVE_GLOBAL_RATE_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 20, "period": 60 }
     }
   ],
   "observability": {
