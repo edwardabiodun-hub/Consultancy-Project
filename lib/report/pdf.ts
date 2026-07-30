@@ -1056,7 +1056,7 @@ export async function buildAssessmentPdf(
   label(methodology, "Limitations");
   drawAt(
     methodology,
-    "Raw answers and free-text narratives are not retained. Controlled question and option labels reconstruct only approved evidence summaries. Findings are directional and causes require validation.",
+    "Raw answers, question-level evidence, and free-text narratives are not retained. Findings are reconstructed from normalized derived codes and remain directional; causes require validation.",
     { size: 8, lineHeight: 11, gapAfter: 7, color: COLORS.muted },
   );
   label(methodology, "Professional boundary");

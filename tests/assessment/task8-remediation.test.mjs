@@ -213,6 +213,11 @@ test("migration marks retained records attempted and removes historical raw find
   assert.match(sql, /UPDATE assessment_records[\s\S]*narrative_attempt_status\s*=\s*'attempted'/i);
   assert.match(sql, /findings_json\s*=\s*'\[\]'/i);
 });
+test("PDF methodology describes normalized findings without implying question-level evidence retention", async () => {
+  const pdfSource = await readFile(new URL("lib/report/pdf.ts", projectRoot), "utf8");
+  assert.match(pdfSource, /normalized derived codes/i);
+  assert.doesNotMatch(pdfSource, /question and option labels reconstruct/i);
+});
 test("retention copy describes the 90-day period, daily cleanup lag, and operational mailbox policy", async () => {
   const [privacy, gate, readme] = await Promise.all([
     readFile(new URL("app/privacy/page.tsx", projectRoot), "utf8"),
