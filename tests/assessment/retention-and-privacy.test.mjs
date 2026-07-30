@@ -77,6 +77,7 @@ test("privacy, consent, and operations docs disclose internal narrative email an
     assert.match(source, /info@runrategroup\.com/i);
     assert.match(source, /name.*email.*company.*role/is);
     assert.match(source, /OpenAI.*(?:no|not).*identity.*raw answers/is);
+    assert.match(source, /OpenAI.*scores.*confidence.*risk codes.*priorities.*capacity/is);
     assert.match(source, /narrative prose.*not.*D1/is);
     assert.match(source, /mailbox/is);
   }

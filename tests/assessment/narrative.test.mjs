@@ -70,19 +70,19 @@ const restrictedResult = buildAssessmentResult({ ...baseAnswers, restrictedMarke
 
 const validDraft = () => ({
   summary:
-    "The self-reported result shows a developing level of independence across the three assessed areas.",
+    "The self-reported result shows a developing level of independence across the assessed areas.",
   componentObservations: [
     {
       component: "ownerIndependence",
-      observation: "Owner independence scored 50, a self-reported watchpoint on decision concentration.",
+      observation: "Owner independence is a self-reported watchpoint on decision concentration.",
     },
     {
       component: "operatingSystem",
-      observation: "The operating system scored 50, a self-reported watchpoint on workflow documentation.",
+      observation: "The operating system is a self-reported watchpoint on workflow documentation.",
     },
     {
       component: "informationVisibility",
-      observation: "Information visibility scored 50, a self-reported watchpoint on KPI cadence.",
+      observation: "Information visibility is a self-reported watchpoint on KPI cadence.",
     },
   ],
   priorityId: "ownerIndependence",
@@ -100,12 +100,12 @@ test("validateNarrative accepts a draft that stays within the controlled vocabul
   assert.equal(validateNarrative(validDraft(), result), true);
 });
 
-test("validateNarrative accepts capacity figures that exactly match the deterministic result", () => {
+test("validateNarrative rejects AI-authored capacity figures even when they match deterministic output", () => {
   const draft = {
     ...validDraft(),
     summary: `${validDraft().summary} Recoverable capacity is estimated at $11,000 to $15,400 annually across 150 to 210 hours.`,
   };
-  assert.equal(validateNarrative(draft, result), true);
+  assert.equal(validateNarrative(draft, result), false);
 });
 
 test("validateNarrative rejects a financial number absent from the deterministic capacity output", () => {
@@ -198,6 +198,46 @@ test("validateNarrative rejects invented bare scores, counts, and durations", ()
   }
 });
 
+const appendUncontrolledText = (field, claim) => {
+  const draft = validDraft();
+  if (field === "componentObservations") {
+    return {
+      ...draft,
+      componentObservations: draft.componentObservations.map((entry, index) =>
+        index === 0 ? { ...entry, observation: `${entry.observation} ${claim}` } : entry,
+      ),
+    };
+  }
+  return { ...draft, [field]: `${draft[field]} ${claim}` };
+};
+
+test("validateNarrative rejects numeric prose in every uncontrolled field regardless of unit or spelling", () => {
+  for (const field of ["summary", "componentObservations", "limitations"]) {
+    for (const claim of [
+      "The opportunity is $50.",
+      "The operation spans 50 locations.",
+      "The recoverable share is 50%.",
+      "The estimate includes 50 hours.",
+      "The operation spans fifty locations.",
+    ]) {
+      assert.equal(validateNarrative(appendUncontrolledText(field, claim), result), false, `${field}: ${claim}`);
+    }
+  }
+});
+
+test("validateNarrative rejects directive language in every uncontrolled field", () => {
+  for (const field of ["summary", "componentObservations", "limitations"]) {
+    for (const claim of [
+      "Hire a COO immediately.",
+      "You should replace the ERP.",
+      "Implement a new reporting system.",
+      "The company needs to appoint an operations leader.",
+    ]) {
+      assert.equal(validateNarrative(appendUncontrolledText(field, claim), result), false, `${field}: ${claim}`);
+    }
+  }
+});
+
 test("validateNarrative rejects an allowed priority followed by an unrelated recommendation", () => {
   const draft = {
     ...validDraft(),
@@ -246,13 +286,13 @@ test("validateNarrative rejects an unlabeled directional estimate presented as f
   assert.equal(validateNarrative(draft, directionalResult), false);
 });
 
-test("validateNarrative accepts a directional estimate that is clearly labeled as an estimate", () => {
+test("validateNarrative rejects AI-authored directional figures even when labeled as estimates", () => {
   const draft = {
     ...validDraft(),
     summary:
       "Developing independence is indicated. Recovered capacity is a directional estimate of $7,700 to $12,100 annually across 105 to 165 hours.",
   };
-  assert.equal(validateNarrative(draft, directionalResult), true);
+  assert.equal(validateNarrative(draft, directionalResult), false);
 });
 
 test("validateNarrative rejects a commercial CTA for a restricted record", () => {
@@ -292,28 +332,25 @@ test("validateNarrative rejects limitations text missing the self-reported or no
 // buildNarrativeModelInput / flattenNarrativeDraft
 // ---------------------------------------------------------------------------
 
-test("buildNarrativeModelInput sends only safe business context, never contact fields", () => {
-  const input = buildNarrativeModelInput(result, {
-    employeeBand: "20-49",
-    revenueBand: "5m-20m",
-    role: "Owner-operator",
-    restrictedMarket: false,
-  });
+test("buildNarrativeModelInput sends only deterministic derived outputs", () => {
+  const input = buildNarrativeModelInput(result);
+  const serialized = JSON.stringify(input);
 
-  assert.equal(input.employeeBand, "20-49");
-  assert.equal(input.revenueBand, "5m-20m");
-  assert.equal(input.role, "Owner-operator");
-  assert.equal(input.restrictedMarket, false);
+  assert.deepEqual(Object.keys(input).sort(), [
+    "capacity", "components", "impactConfidence", "overallScore", "priorities",
+    "risks", "route", "scoreCategory", "scoreConfidence",
+  ]);
   assert.equal(input.overallScore, result.score.overall);
   assert.deepEqual(input.capacity.recoverableHours, result.capacity.recoverableHours);
-  assert.deepEqual(
-    input.priorities.map((priority) => priority.component),
-    result.interpretation.priorities.map((priority) => priority.component),
-  );
-  assert.equal("name" in input, false);
-  assert.equal("workEmail" in input, false);
-  assert.equal("phone" in input, false);
-  assert.equal("scored" in input, false);
+  assert.deepEqual(input.priorities.map((priority) => priority.component), result.interpretation.priorities.map((priority) => priority.component));
+  for (const field of ["name", "workEmail", "phone", "scored", "employeeBand", "revenueBand", "role", "restrictedMarket"]) {
+    assert.equal(field in input, false, field);
+  }
+  assert.ok(input.risks.every((risk) => Object.keys(risk).sort().join(",") === "code,component,kind"));
+  for (const risk of result.risks) {
+    assert.equal(serialized.includes(risk.evidence), false);
+    assert.equal(serialized.includes(risk.label), false);
+  }
 });
 
 test("flattenNarrativeDraft joins the four contract fields into a single readable string", () => {
@@ -343,12 +380,7 @@ test("callNarrativeModel sends the configured model and parses JSON message cont
     );
   };
 
-  const draft = await callNarrativeModel(buildNarrativeModelInput(result, {
-    employeeBand: "20-49",
-    revenueBand: "5m-20m",
-    role: "Owner-operator",
-    restrictedMarket: false,
-  }), {
+  const draft = await callNarrativeModel(buildNarrativeModelInput(result), {
     apiKey: "test-key",
     model: "test-model",
     fetchImpl,
@@ -357,6 +389,11 @@ test("callNarrativeModel sends the configured model and parses JSON message cont
   assert.equal(requestUrl, "https://api.openai.com/v1/chat/completions");
   assert.equal(requestHeaders.Authorization, "Bearer test-key");
   assert.equal(requestBody.model, "test-model");
+  const modelUserInput = requestBody.messages.find((message) => message.role === "user").content;
+  assert.equal(modelUserInput.includes("Owner-operator"), false);
+  assert.equal(modelUserInput.includes("20-49"), false);
+  assert.equal(modelUserInput.includes("5m-20m"), false);
+  assert.equal(modelUserInput.includes("Self-reported response:"), false);
   assert.deepEqual(draft, validDraft());
 });
 
@@ -372,12 +409,7 @@ test("callNarrativeModel aborts and rejects when the request exceeds the configu
 
   await assert.rejects(
     callNarrativeModel(
-      buildNarrativeModelInput(result, {
-        employeeBand: "20-49",
-        revenueBand: "5m-20m",
-        role: "Owner-operator",
-        restrictedMarket: false,
-      }),
+      buildNarrativeModelInput(result),
       { apiKey: "test-key", model: "test-model", timeoutMs: 15, fetchImpl: hangingFetch },
     ),
   );
@@ -392,12 +424,7 @@ test("callNarrativeModel throws on malformed JSON message content", async () => 
 
   await assert.rejects(
     callNarrativeModel(
-      buildNarrativeModelInput(result, {
-        employeeBand: "20-49",
-        revenueBand: "5m-20m",
-        role: "Owner-operator",
-        restrictedMarket: false,
-      }),
+      buildNarrativeModelInput(result),
       { apiKey: "test-key", model: "test-model", fetchImpl },
     ),
   );
@@ -424,19 +451,12 @@ const withEnv = async (env, run) => {
   }
 };
 
-const safeContext = {
-  employeeBand: "20-49",
-  revenueBand: "5m-20m",
-  role: "Owner-operator",
-  restrictedMarket: false,
-};
-
 test("generateValidatedNarrative falls back to rules when API key and model are unset", async () => {
   let called = false;
   await withEnv(
     { OPENAI_API_KEY: undefined, ASSESSMENT_NARRATIVE_MODEL: undefined },
     async () => {
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         callModel: async () => {
           called = true;
           return validDraft();
@@ -452,7 +472,7 @@ test("generateValidatedNarrative falls back to rules when only the API key is se
   await withEnv(
     { OPENAI_API_KEY: "key", ASSESSMENT_NARRATIVE_MODEL: undefined },
     async () => {
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         callModel: async () => validDraft(),
       });
       assert.equal(outcome.source, "rules");
@@ -464,7 +484,7 @@ test("generateValidatedNarrative falls back to rules when the model call throws"
   await withEnv(
     { OPENAI_API_KEY: "key", ASSESSMENT_NARRATIVE_MODEL: "model" },
     async () => {
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         callModel: async () => {
           throw new Error("network unreachable");
         },
@@ -486,7 +506,7 @@ test("generateValidatedNarrative falls back to rules on a real network timeout",
             reject(error);
           });
         });
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         timeoutMs: 15,
         fetchImpl: hangingFetch,
       });
@@ -504,7 +524,7 @@ test("generateValidatedNarrative falls back to rules on malformed JSON from the 
           JSON.stringify({ choices: [{ message: { content: "{not valid json" } }] }),
           { status: 200 },
         );
-      const outcome = await generateValidatedNarrative(result, safeContext, { fetchImpl });
+      const outcome = await generateValidatedNarrative(result, { fetchImpl });
       assert.deepEqual(outcome, { source: "rules", text: result.narrative.summary });
     },
   );
@@ -514,7 +534,7 @@ test("generateValidatedNarrative falls back to rules when the draft shape does n
   await withEnv(
     { OPENAI_API_KEY: "key", ASSESSMENT_NARRATIVE_MODEL: "model" },
     async () => {
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         callModel: async () => ({ summary: "Missing the other required fields." }),
       });
       assert.deepEqual(outcome, { source: "rules", text: result.narrative.summary });
@@ -526,7 +546,7 @@ test("generateValidatedNarrative falls back to rules when the draft fails policy
   await withEnv(
     { OPENAI_API_KEY: "key", ASSESSMENT_NARRATIVE_MODEL: "model" },
     async () => {
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         callModel: async () => ({
           ...validDraft(),
           summary: `${validDraft().summary} This guarantees results.`,
@@ -541,7 +561,7 @@ test("generateValidatedNarrative returns the AI source and flattened text for a 
   await withEnv(
     { OPENAI_API_KEY: "key", ASSESSMENT_NARRATIVE_MODEL: "model" },
     async () => {
-      const outcome = await generateValidatedNarrative(result, safeContext, {
+      const outcome = await generateValidatedNarrative(result, {
         callModel: async () => validDraft(),
       });
       assert.equal(outcome.source, "ai");
@@ -555,9 +575,6 @@ test("generateValidatedNarrative never forwards restricted-record content into a
     { OPENAI_API_KEY: "key", ASSESSMENT_NARRATIVE_MODEL: "model" },
     async () => {
       const outcome = await generateValidatedNarrative(restrictedResult, {
-        ...safeContext,
-        restrictedMarket: true,
-      }, {
         callModel: async () => ({
           ...validDraft(),
           priorityExplanation: `${validDraft().priorityExplanation} Schedule a call to discuss the Business Independence Diagnostic.`,
@@ -666,14 +683,15 @@ test("narrative route returns 422 for an invalid payload without generating a na
   assert.equal(generateCalled, false);
 });
 
-test("narrative route recomputes the result server-side and forwards only safe context to generation", async () => {
-  let receivedContext = null;
+test("narrative route recomputes the result server-side without forwarding raw answer context", async () => {
+  let generatorArgumentCount = null;
   let receivedResult = null;
   const handler = createAssessmentNarrativeHandler({
     ...routeTestDependencies,
-    generateNarrative: async (result, context) => {
+    generateNarrative: async (...args) => {
+      const [result] = args;
       receivedResult = result;
-      receivedContext = context;
+      generatorArgumentCount = args.length;
       return { source: "rules", text: result.narrative.summary };
     },
     updateNarrativeSource: async () => {},
@@ -688,15 +706,7 @@ test("narrative route recomputes the result server-side and forwards only safe c
   assert.equal(response.status, 200);
   assert.equal(body.ok, true);
   assert.equal(receivedResult.score.overall, 50, "server must recompute, never trust a client-supplied result");
-  assert.deepEqual(receivedContext, {
-    employeeBand: "20-49",
-    revenueBand: "5m-20m",
-    role: "Owner-operator",
-    restrictedMarket: false,
-  });
-  assert.equal("name" in receivedContext, false);
-  assert.equal("workEmail" in receivedContext, false);
-  assert.equal("phone" in receivedContext, false);
+  assert.equal(generatorArgumentCount, 1);
   assert.equal(body.narrative.source, "rules");
 });
 

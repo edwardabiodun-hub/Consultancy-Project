@@ -45,6 +45,7 @@ test("the package scripts include explicit Cloudflare build, migration, and depl
   );
 
   assert.equal(packageJson.scripts["test:deployment"], "node --test tests/cloudflare-deployment.test.mjs");
+  assert.match(packageJson.scripts["test:component"], /--test-concurrency=1/);
   assert.equal(packageJson.scripts["cf:build"], "npm run build");
   assert.equal(
     packageJson.scripts["cf:migrate"],

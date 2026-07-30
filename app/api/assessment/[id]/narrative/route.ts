@@ -162,12 +162,7 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
       return unavailable();
     }
 
-    const narrative = await generateNarrative(result, {
-      employeeBand: parsed.answers.employeeBand,
-      revenueBand: parsed.answers.revenueBand,
-      role: parsed.answers.role,
-      restrictedMarket: parsed.answers.restrictedMarket,
-    });
+    const narrative = await generateNarrative(result);
 
     let persistenceAvailable = true;
     try {

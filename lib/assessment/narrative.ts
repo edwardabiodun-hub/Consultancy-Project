@@ -8,14 +8,6 @@ import {
 
 export type { NarrativeDraft } from "./narrative-validation";
 
-/** The only answer fields that may reach the model: no name, email, phone, or raw question responses. */
-export type SafeNarrativeContext = {
-  employeeBand: string;
-  revenueBand: string;
-  role: string;
-  restrictedMarket: boolean;
-};
-
 /**
  * Everything the model is allowed to see. Deliberately excludes any
  * free-text or contact data; every value here is already a deterministic,
@@ -36,13 +28,9 @@ export type NarrativeModelInput = {
     recoverableHours: AssessmentResult["capacity"]["recoverableHours"];
     annualValue: AssessmentResult["capacity"]["annualValue"];
   };
-  risks: Array<{ code: string; kind: string; label: string; evidence: string }>;
+  risks: Array<{ code: string; kind: string; component: ComponentId | null }>;
   priorities: Array<{ component: ComponentId; title: string; action: string; indicator: string }>;
   route: AssessmentResult["interpretation"]["route"];
-  employeeBand: string;
-  revenueBand: string;
-  role: string;
-  restrictedMarket: boolean;
 };
 
 export type NarrativeOutcome = { source: "ai" | "rules"; text: string };
@@ -52,12 +40,12 @@ const DEFAULT_TIMEOUT_MS = 8000;
 
 const SYSTEM_PROMPT = [
   "You are drafting a short narrative for a deterministic Business Independence Assessment result.",
-  "You are given only bounded, already-computed scores, capacity figures, risk labels, and controlled priority text.",
-  "Never introduce a number, percentage, or hour figure that is not exactly present in the provided data.",
+  "You are given only bounded, already-computed scores, capacity figures, normalized risk codes and finding kinds, and controlled priority text.",
+  "Do not write numerals, currency, percentages, ranges, counts, durations, or number words. Numeric results are rendered separately by deterministic code.",
   "Never reference a risk code, benchmark, or comparison that is not provided.",
-  "Never recommend anything outside the three provided controlled priorities.",
+  "Keep the summary, component observations, and limitations descriptive. Never use directive or recommendation language such as should, must, recommend, hire, buy, replace, or implement.",
   "Never promise savings, revenue, valuation, or guaranteed results.",
-  "Clearly label every capacity figure as an estimate when its estimateType is not \"calculated\".",
+  "Use estimate type only to describe certainty; do not quote the numeric figures.",
   "The limitations sentence must state the result is self-reported and not an audit.",
   "Never propose a call to action other than the one implied by the provided route.",
   'Return one provided priority component as priorityId. Copy that priority as: "Title: Action Indicator: Indicator." with no added recommendation.',
@@ -65,14 +53,11 @@ const SYSTEM_PROMPT = [
 ].join(" ");
 
 /**
- * Builds the safe, bounded model input from the deterministic result and the
- * subset of answer fields the brief allows sending to the model. No name,
- * email, phone, or raw scored answers are included.
+ * Builds a safe, bounded model input exclusively from deterministic derived
+ * outputs. No respondent identity, categorical context answers, question
+ * prompts, selected labels, raw scored answers, or free text are included.
  */
-export function buildNarrativeModelInput(
-  result: AssessmentResult,
-  context: SafeNarrativeContext,
-): NarrativeModelInput {
+export function buildNarrativeModelInput(result: AssessmentResult): NarrativeModelInput {
   return {
     overallScore: result.score.overall,
     scoreCategory: result.score.category,
@@ -101,8 +86,7 @@ export function buildNarrativeModelInput(
     risks: result.risks.map((risk) => ({
       code: risk.code,
       kind: risk.kind,
-      label: risk.label,
-      evidence: risk.evidence,
+      component: risk.component,
     })),
     priorities: result.interpretation.priorities.map((priority) => ({
       component: priority.component,
@@ -111,10 +95,6 @@ export function buildNarrativeModelInput(
       indicator: priority.indicator,
     })),
     route: result.interpretation.route,
-    employeeBand: context.employeeBand,
-    revenueBand: context.revenueBand,
-    role: context.role,
-    restrictedMarket: context.restrictedMarket,
   };
 }
 
@@ -203,7 +183,6 @@ type GenerateDependencies = {
  */
 export async function generateValidatedNarrative(
   result: AssessmentResult,
-  context: SafeNarrativeContext,
   dependencies: Partial<GenerateDependencies> = {},
 ): Promise<NarrativeOutcome> {
   const rulesFallback: NarrativeOutcome = { source: "rules", text: result.narrative.summary };
@@ -213,7 +192,7 @@ export async function generateValidatedNarrative(
   if (!apiKey || !model) return rulesFallback;
 
   const requestDraft = dependencies.callModel ?? callNarrativeModel;
-  const modelInput = buildNarrativeModelInput(result, context);
+  const modelInput = buildNarrativeModelInput(result);
 
   let rawDraft: unknown;
   try {

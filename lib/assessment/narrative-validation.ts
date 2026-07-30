@@ -46,14 +46,6 @@ const OUTCOME_PROMISE_PHRASES = [
   /\bprovable roi\b/i,
 ];
 
-const ESTIMATE_QUALIFIER_PHRASES = [
-  /estimat/i,
-  /directional/i,
-  /approx/i,
-  /range of/i,
-  /midpoint/i,
-];
-
 /**
  * Structural type guard for an unknown parsed-JSON value. This is the first
  * gate applied to whatever the model returns: it must match the
@@ -91,47 +83,23 @@ const draftText = (draft: NarrativeDraft): string =>
     draft.limitations,
   ].join("\n");
 
-const extractNumbers = (text: string): number[] =>
-  [...text.matchAll(/(?<![A-Za-z_])\$?\s*([0-9][\d,]*(?:\.\d+)?)(?![A-Za-z_])/g)]
-    .map((match) => Number(match[1].replace(/,/g, "")));
+const uncontrolledDraftText = (draft: NarrativeDraft): string =>
+  [
+    draft.summary,
+    ...draft.componentObservations.map((entry) => entry.observation),
+    draft.limitations,
+  ].join("\n");
 
-const INVENTED_COUNT_OR_DURATION =
-  /\b\d[\d,.]*\s*(?:days?|weeks?|months?|years?|managers?|employees?|people|systems?|reports?|workflows?|decisions?|stakeholders?)\b/i;
+const NUMERIC_PROSE = /[0-9$\u20ac\u00a3\u00a5%]/u;
+const NUMBER_WORDS =
+  /\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|first|second|third|dozen)\b/i;
+const DIRECTIVE_LANGUAGE = [
+  /\b(?:should|must|ought to|need(?:s)? to|recommend(?:s|ed|ing|ation)?|advise(?:s|d|ing)?|consider)\b/i,
+  /(?:^|[.!?]\s+)(?:(?:please|immediately|now)\s+)*(?:hire|buy|purchase|implement|adopt|deploy|replace|automate|contact|schedule|book|engage|appoint|install|invest)\b/i,
+];
 
 const extractSnakeCaseCodes = (text: string): string[] =>
   [...text.matchAll(/\b[a-z]+(?:_[a-z]+)+\b/g)].map((match) => match[0]);
-
-const allowedNumbers = (result: AssessmentResult): Set<number> => {
-  const candidates: Array<number | null | undefined> = [
-    result.score.overall,
-    result.score.components.ownerIndependence?.score,
-    result.score.components.operatingSystem?.score,
-    result.score.components.informationVisibility?.score,
-    result.capacity.recoverableHours?.low,
-    result.capacity.recoverableHours?.high,
-    result.capacity.annualValue?.low,
-    result.capacity.annualValue?.high,
-    result.capacity.grossHours?.owner,
-    result.capacity.grossHours?.reporting,
-    result.capacity.grossHours?.rework,
-    result.capacity.grossHours?.total,
-    result.capacity.realizationFactors ? result.capacity.realizationFactors.low * 100 : undefined,
-    result.capacity.realizationFactors ? result.capacity.realizationFactors.high * 100 : undefined,
-  ];
-  return new Set(candidates.filter((value): value is number => typeof value === "number"));
-};
-
-const mentionsCapacityFigure = (numbers: number[], result: AssessmentResult): boolean => {
-  const values = new Set(
-    [
-      result.capacity.recoverableHours?.low,
-      result.capacity.recoverableHours?.high,
-      result.capacity.annualValue?.low,
-      result.capacity.annualValue?.high,
-    ].filter((value): value is number => typeof value === "number"),
-  );
-  return numbers.some((value) => values.has(value));
-};
 
 const normalizeControlledText = (value: string): string =>
   value.trim().replace(/\s+/g, " ").toLowerCase();
@@ -194,11 +162,9 @@ export function validateNarrative(draft: NarrativeDraft, result: AssessmentResul
   }
 
   const text = draftText(draft);
-
-  const numbers = extractNumbers(text);
-  if (INVENTED_COUNT_OR_DURATION.test(text)) return false;
-  const allowed = allowedNumbers(result);
-  if (numbers.some((value) => !allowed.has(value))) return false;
+  const uncontrolledText = uncontrolledDraftText(draft);
+  if (NUMERIC_PROSE.test(uncontrolledText) || NUMBER_WORDS.test(uncontrolledText)) return false;
+  if (DIRECTIVE_LANGUAGE.some((phrase) => phrase.test(uncontrolledText))) return false;
 
   // The only risk codes this draft may reference are the ones actually sent
   // to the model for this specific result (`buildNarrativeModelInput` puts
@@ -219,14 +185,6 @@ export function validateNarrative(draft: NarrativeDraft, result: AssessmentResul
   if (!/not an audit/i.test(draft.limitations)) return false;
 
   if (!priorityExplanationWithinLibrary(draft, result)) return false;
-
-  if (
-    result.capacity.estimateType === "directional" &&
-    mentionsCapacityFigure(numbers, result) &&
-    !ESTIMATE_QUALIFIER_PHRASES.some((phrase) => phrase.test(text))
-  ) {
-    return false;
-  }
 
   if (!ctaIsConsistent(text, result)) return false;
 

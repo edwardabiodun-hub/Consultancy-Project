@@ -143,7 +143,11 @@ past results without silently re-scoring them.
   limit. One durable internal notification goes to `info@runrategroup.com` with
   respondent name, email, company, role, deterministic result, and accepted
   narrative. Phone, raw answers, and free text are excluded. OpenAI receives no
-  respondent identity or raw answers. Narrative prose is not persisted in D1;
+  respondent identity or raw answers. It receives only deterministic derived
+  scores, confidence levels, normalized risk codes, controlled priorities,
+  route, and deterministic capacity output. Question prompts, selected labels,
+  role, company-size bands, revenue bands, and restriction answers are excluded.
+  Narrative prose is not persisted in D1;
   the accepted `ai` or `rules` source tag is retained there, while the prose is
   retained in the internal email mailbox for up to 90 days.
 
@@ -241,7 +245,9 @@ the cutoff and deletion counts to `retention_cleanup_runs` for auditability.
 Narrative prose is not stored in D1. The internal notification mailbox copy sent
 to `info@runrategroup.com` contains name, email, company, role, deterministic
 result, and accepted narrative and is deleted under the same 90-day operational
-mailbox policy. OpenAI receives no respondent identity or raw answers. A
+mailbox policy. OpenAI receives no respondent identity or raw answers. It
+receives only deterministic derived scores, confidence levels, normalized risk
+codes, controlled priorities, route, and deterministic capacity output. A
 respondent may request earlier correction or deletion using the contact page.
 
 ### Production smoke-test checklist
