@@ -109,41 +109,43 @@ past results without silently re-scoring them.
 
 ### Architecture
 
-- `lib/assessment/questions.ts` — the versioned question bank (15 required +
+- `lib/assessment/questions.ts` Ã¢â‚¬â€ the versioned question bank (15 required +
   3 conditional questions across three weighted components: Owner
   Independence 35%, Operating-System Maturity 35%, Information Visibility
   30%).
-- `lib/assessment/scoring.ts` — deterministic scoring and score-confidence
+- `lib/assessment/scoring.ts` Ã¢â‚¬â€ deterministic scoring and score-confidence
   (`high` / `medium` / `low` / `incomplete`) from answer coverage and `Unknown`
   counts. Below 60% coverage, no numeric overall score is produced.
-- `lib/assessment/capacity.ts` — deterministic recoverable-capacity
+- `lib/assessment/capacity.ts` Ã¢â‚¬â€ deterministic recoverable-capacity
   calculation and impact confidence (`high` for exact inputs, `medium` for
   banded inputs across at least two eligible categories, `low`/unavailable
   otherwise). Impact confidence is independent of score confidence.
-- `lib/assessment/interpretation.ts` — risk codes, 90-day priorities, and lead
+- `lib/assessment/interpretation.ts` Ã¢â‚¬â€ risk codes, 90-day priorities, and lead
   routing (`diagnostic` / `nurture` / `insights` / `restricted`).
-- `lib/assessment/result.ts` (`buildAssessmentResult`) — composes the above
+- `lib/assessment/result.ts` (`buildAssessmentResult`) Ã¢â‚¬â€ composes the above
   into the single result object the UI, PDF, email, and narrative all consume.
   The server always recomputes this from raw answers; client-supplied score,
   capacity, or route values in a request body are ignored (see
   `app/api/assessment/calculate/route.ts`).
-- `app/assessment/*.tsx` — the client-rendered assessment flow
+- `app/assessment/*.tsx` Ã¢â‚¬â€ the client-rendered assessment flow
   (`AssessmentFlow.tsx`) and its screens (`PreliminaryResult.tsx`,
   `ContactGate.tsx`, `PrecisionInputs.tsx`/`BandedCapacityInputs.tsx`,
   `FullResult.tsx`).
-- `lib/report/pdf.ts` — builds the seven-page executive-summary PDF from a
+- `lib/report/pdf.ts` Ã¢â‚¬â€ builds the seven-page executive-summary PDF from a
   compact persisted record (no raw answers or free text).
 - `lib/email/assessment-report.ts` and
-  `app/api/assessment/[id]/deliver/route.ts` — optional report email delivery
+  `app/api/assessment/[id]/deliver/route.ts` Ã¢â‚¬â€ optional report email delivery
   via Resend.
 - `lib/assessment/narrative.ts` / `narrative-validation.ts` — the result screen
   renders the deterministic result and rules summary first, then requests an
-  optional narrative enhancement asynchronously. A validated AI narrative or
-  rules fallback replaces the summary with its source clearly labeled. The
-  narrative request sends one internal notification to `CONTACT_TO_EMAIL` that
-  includes approved lead identity fields; lead identity is excluded from the
-  OpenAI request. Narrative prose is never retained (only the accepted source,
-  `ai` or `rules`, may be recorded).
+  optional narrative enhancement. The endpoint binds the posted payload to its
+  compact D1 record before AI or email work and applies a per-assessment rate
+  limit. One durable internal notification goes to `info@runrategroup.com` with
+  respondent name, email, company, role, deterministic result, and accepted
+  narrative. Phone, raw answers, and free text are excluded. OpenAI receives no
+  respondent identity or raw answers. Narrative prose is not persisted in D1;
+  the accepted `ai` or `rules` source tag is retained there, while the prose is
+  retained in the internal email mailbox for up to 90 days.
 
 ### Environment variables
 
@@ -153,13 +155,13 @@ fully configured.
 
 | Variable | Required for | Behavior when unset |
 |---|---|---|
-| `RESEND_API_KEY` | Contact form and assessment-report email delivery | `/api/contact` and `/api/assessment/:id/deliver` return `503` with a clear "not yet configured" error; no email is sent and no result data is lost |
+| `RESEND_API_KEY` | Contact form, assessment-report delivery, and internal assessment notification | `/api/contact` and `/api/assessment/:id/deliver` return `503` with a clear "not yet configured" error; no email is sent and no result data is lost |
 | `CONTACT_TO_EMAIL` | Contact form and internal assessment-notification destination | The contact form returns `503` when required email configuration is absent. For the internal assessment notification, missing configuration returns `internalNotificationAccepted: false`; the narrative route still returns `200` and the visitor result remains available. |
-| `CONTACT_FROM_EMAIL` | Contact form sender identity | Same as above |
+| `CONTACT_FROM_EMAIL` | Contact form and internal assessment-notification sender identity | Same as above |
 | `ASSESSMENT_REPORT_FROM_EMAIL` | Assessment report sender identity | `/api/assessment/:id/deliver` returns `503`, same as above |
 | `NEXT_PUBLIC_SITE_URL` | Absolute URLs in emails/metadata | Falls back to relative paths |
 | `OPENAI_API_KEY` | AI-generated narrative | Narrative source falls back to the deterministic rules summary |
-| `ASSESSMENT_NARRATIVE_MODEL` | AI-generated narrative | Same as above — **both** `OPENAI_API_KEY` and `ASSESSMENT_NARRATIVE_MODEL` must be set together, or the rules narrative is used |
+| `ASSESSMENT_NARRATIVE_MODEL` | AI-generated narrative | Same as above Ã¢â‚¬â€ **both** `OPENAI_API_KEY` and `ASSESSMENT_NARRATIVE_MODEL` must be set together, or the rules narrative is used |
 
 D1 (`DB` binding, declared in `.openai/hosting.json`) is likewise optional at
 runtime: see [Local rules-only mode](#local-rules-only-mode).
@@ -185,8 +187,8 @@ this codebase.
 ### Local rules-only mode
 
 With no `DB` binding, no `RESEND_API_KEY`, and no
-`OPENAI_API_KEY`/`ASSESSMENT_NARRATIVE_MODEL` configured — the default state
-of a fresh checkout — the assessment still fully functions:
+`OPENAI_API_KEY`/`ASSESSMENT_NARRATIVE_MODEL` configured Ã¢â‚¬â€ the default state
+of a fresh checkout Ã¢â‚¬â€ the assessment still fully functions:
 
 - Scoring, capacity calculation, risk findings, priorities, and routing are
   100% deterministic and require no external service.
@@ -210,7 +212,7 @@ run, not just manually.
 - **Email** (Task 9): report delivery
   (`POST /api/assessment/:id/deliver`) and the contact form
   (`POST /api/contact`) both require Resend configuration; if it is missing
-  they return `503` and never claim success. Delivery is idempotent — a
+  they return `503` and never claim success. Delivery is idempotent Ã¢â‚¬â€ a
   second delivery request for an already-sent report returns
   `status: "already_sent"` without re-sending or re-attempting Resend
   (`app/api/assessment/[id]/deliver/route.ts`). A downstream Resend failure
@@ -218,35 +220,36 @@ run, not just manually.
   retry remains possible.
 - **AI narrative** (Task 10): `lib/assessment/narrative.ts` calls OpenAI only
   when both `OPENAI_API_KEY` and `ASSESSMENT_NARRATIVE_MODEL` are set. Any
-  failure mode — missing configuration, network error, timeout, malformed
+  failure mode Ã¢â‚¬â€ missing configuration, network error, timeout, malformed
   model output, a draft that does not match the required contract shape, or a
   draft that fails `validateNarrative` policy checks (invented figures,
   out-of-vocabulary risk codes, unapproved recommendations, promised
   outcomes, a commercial CTA on a restricted record, or a missing
-  self-reported/non-audit disclosure) — falls back to the deterministic rules
+  self-reported/non-audit disclosure) Ã¢â‚¬â€ falls back to the deterministic rules
   narrative. The AI narrative can only ever restate the existing deterministic
   result; it cannot alter scores, capacity, routing, or recommendations.
 
 ### Data deletion procedure
 
-Per `/privacy`: a respondent may request correction or deletion of any
-retained inquiry or assessment record using the [contact page](/contact).
-Persisted assessment records are compact (score/confidence/capacity/routing
-fields and consent-gated contact details) — raw scored answers and free-text
-narratives are not retained. Assessment persistence is not enabled in
-production until an explicit compact-record retention duration is set and
-published on `/privacy`.
+Compact D1 assessment records and related assessment events are retained for up
+to 90 days. A daily Cloudflare scheduled cleanup deletes expired data and writes
+the cutoff and deletion counts to `retention_cleanup_runs` for auditability.
+Narrative prose is not stored in D1. The internal notification mailbox copy sent
+to `info@runrategroup.com` contains name, email, company, role, deterministic
+result, and accepted narrative and is deleted under the same 90-day operational
+mailbox policy. OpenAI receives no respondent identity or raw answers. A
+respondent may request earlier correction or deletion using the contact page.
 
 ### Production smoke-test checklist
 
 This is a manual checklist for a human to run after any future deployment
-(deployment itself is out of scope for this document — no production
+(deployment itself is out of scope for this document Ã¢â‚¬â€ no production
 deployment has occurred as of this writing):
 
 - [ ] `/assessment` loads and the six-question flow can be completed with the
       keyboard.
-- [ ] A rules-only result completes end to end (context → scored questions →
-      preliminary result → contact → precision or skip → full result) with no
+- [ ] A rules-only result completes end to end (context Ã¢â€ â€™ scored questions Ã¢â€ â€™
+      preliminary result Ã¢â€ â€™ contact Ã¢â€ â€™ precision or skip Ã¢â€ â€™ full result) with no
       AI or email configuration present.
 - [ ] With a real `DB` binding, submitting the assessment persists a compact
       record and `persistenceAvailable: true` is returned.

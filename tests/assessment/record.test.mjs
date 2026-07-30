@@ -102,6 +102,7 @@ test("compact record excludes detailed answers and selects reproducible fields",
     id: "assessment-1",
     lead,
     result,
+    role: "Owner-operator",
   });
 
   assert.equal("answers" in record, false);
@@ -112,6 +113,7 @@ test("compact record excludes detailed answers and selects reproducible fields",
     name: "Eddie",
     workEmail: "e@example.com",
     company: "Example",
+    role: "Owner-operator",
     phone: "843-555-0100",
     reportConsent: true,
     marketingConsent: false,
@@ -170,6 +172,9 @@ test("compact record excludes detailed answers and selects reproducible fields",
     leadRoute: "diagnostic",
     narrativeSource: "rules",
     reportDeliveryStatus: "pending",
+    internalNotificationStatus: "pending",
+    internalNotificationClaimedAt: null,
+    internalNotificationSentAt: null,
   });
 });
 
@@ -199,6 +204,7 @@ test("compact record uses null contacts and no-delivery status without a lead", 
   });
 
   assert.equal(record.name, null);
+  assert.equal(record.role, null);
   assert.equal(record.reportConsent, false);
   assert.equal(record.marketingConsent, false);
   assert.equal(record.overallScore, null);

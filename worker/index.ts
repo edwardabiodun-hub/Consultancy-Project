@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { runAssessmentRetentionCleanup } from "../lib/retention/assessment";
 
 interface Env {
   ASSETS: Fetcher;
@@ -41,6 +42,9 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+  scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): void {
+    ctx.waitUntil(runAssessmentRetentionCleanup(env.DB));
   },
 };
 

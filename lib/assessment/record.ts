@@ -5,6 +5,7 @@ type AssessmentRecordInput = {
   id: string;
   lead?: AssessmentLead;
   result: AssessmentResult;
+  role?: string;
 };
 
 const componentScore = (
@@ -19,6 +20,7 @@ export function toAssessmentRecord({
   id,
   lead,
   result,
+  role,
 }: AssessmentRecordInput) {
   return {
     id,
@@ -26,6 +28,7 @@ export function toAssessmentRecord({
     name: lead?.name ?? null,
     workEmail: lead?.workEmail ?? null,
     company: lead?.company ?? null,
+    role: role ?? null,
     phone: lead?.phone ?? null,
     reportConsent: lead?.reportConsent ?? false,
     marketingConsent: lead?.marketingConsent ?? false,
@@ -79,5 +82,8 @@ export function toAssessmentRecord({
     reportDeliveryStatus: lead?.reportConsent
       ? ("pending" as const)
       : ("not_requested" as const),
+    internalNotificationStatus: "pending" as const,
+    internalNotificationClaimedAt: null,
+    internalNotificationSentAt: null,
   };
 }

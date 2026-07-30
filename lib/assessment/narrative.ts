@@ -60,7 +60,8 @@ const SYSTEM_PROMPT = [
   "Clearly label every capacity figure as an estimate when its estimateType is not \"calculated\".",
   "The limitations sentence must state the result is self-reported and not an audit.",
   "Never propose a call to action other than the one implied by the provided route.",
-  'Respond with strict JSON matching: { "summary": string, "componentObservations": [{ "component": string, "observation": string }], "priorityExplanation": string, "limitations": string }.',
+  'Return one provided priority component as priorityId. Copy that priority as: "Title: Action Indicator: Indicator." with no added recommendation.',
+  'Respond with strict JSON matching: { "summary": string, "componentObservations": [{ "component": string, "observation": string }], "priorityId": string, "priorityExplanation": string, "limitations": string }.',
 ].join(" ");
 
 /**

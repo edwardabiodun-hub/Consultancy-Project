@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { QUESTION_BANK } from "../../lib/assessment/questions.ts";
 import { buildAssessmentResult } from "../../lib/assessment/result.ts";
+import { toAssessmentRecord } from "../../lib/assessment/record.ts";
 import { validateNarrative } from "../../lib/assessment/narrative-validation.ts";
 import {
   buildNarrativeModelInput,
@@ -84,8 +85,9 @@ const validDraft = () => ({
       observation: "Information visibility scored 50, a self-reported watchpoint on KPI cadence.",
     },
   ],
+  priorityId: "ownerIndependence",
   priorityExplanation:
-    "The first controlled priority is to Clarify decision authority by defining the recurring decisions managers can make without escalation.",
+    "Clarify decision authority: Define the recurring decisions managers can make and the conditions requiring escalation. Indicator: Share of routine decisions resolved without owner intervention.",
   limitations:
     "This is a self-reported result and not an audit of implementation effort, savings, revenue, or valuation.",
 });
@@ -184,6 +186,25 @@ test("validateNarrative rejects a risk code that is valid vocabulary in general 
   assert.equal(validateNarrative(draft, result), false);
 });
 
+test("validateNarrative rejects invented bare scores, counts, and durations", () => {
+  for (const claim of [
+    "The overall score is 99 out of 100.",
+    "This will take 30 days.",
+    "The company has 4 undocumented workflows.",
+    "There are 12 managers involved.",
+  ]) {
+    const draft = { ...validDraft(), summary: `${validDraft().summary} ${claim}` };
+    assert.equal(validateNarrative(draft, result), false, claim);
+  }
+});
+
+test("validateNarrative rejects an allowed priority followed by an unrelated recommendation", () => {
+  const draft = {
+    ...validDraft(),
+    priorityExplanation: `${validDraft().priorityExplanation} Purchase a new ERP and hire two analysts.`,
+  };
+  assert.equal(validateNarrative(draft, result), false);
+});
 test("validateNarrative rejects invented benchmark phrases", () => {
   for (const phrase of [
     "This is below the industry average.",
@@ -245,7 +266,7 @@ test("validateNarrative rejects a commercial CTA for a restricted record", () =>
 test("validateNarrative accepts the restricted record's own educational CTA language", () => {
   const draft = {
     ...validDraft(),
-    priorityExplanation: `${validDraft().priorityExplanation} Explore educational founder resources next.`,
+    priorityExplanation: validDraft().priorityExplanation,
   };
   assert.equal(validateNarrative(draft, restrictedResult), true);
 });
@@ -576,6 +597,23 @@ const validPayload = {
   },
 };
 
+
+const routeResult = buildAssessmentResult(validPayload.answers);
+const routeRecord = {
+  ...toAssessmentRecord({
+    id: assessmentId,
+    lead: validPayload.lead,
+    result: routeResult,
+    role: validPayload.answers.role,
+  }),
+  createdAt: "2026-07-29 12:00:00",
+};
+const routeTestDependencies = {
+  findRecord: async () => routeRecord,
+  checkRateLimit: async () => true,
+  claimInternalNotification: async () => "claimed",
+  finalizeInternalNotification: async () => {},
+};
 const narrativeRequest = (id, body) =>
   new Request(`https://example.com/api/assessment/${id}/narrative`, {
     method: "POST",
@@ -587,6 +625,7 @@ test("narrative route returns 404 for a malformed id and never generates or pers
   let generateCalled = false;
   let updateCalled = false;
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => {
       generateCalled = true;
       return { source: "rules", text: "unused" };
@@ -609,6 +648,7 @@ test("narrative route returns 404 for a malformed id and never generates or pers
 test("narrative route returns 422 for an invalid payload without generating a narrative", async () => {
   let generateCalled = false;
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => {
       generateCalled = true;
       return { source: "rules", text: "unused" };
@@ -630,6 +670,7 @@ test("narrative route recomputes the result server-side and forwards only safe c
   let receivedContext = null;
   let receivedResult = null;
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async (result, context) => {
       receivedResult = result;
       receivedContext = context;
@@ -663,6 +704,7 @@ test("narrative route persists the accepted narrative source against the given i
   let updatedId = null;
   let updatedSource = null;
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
     updateNarrativeSource: async (id, source) => {
       updatedId = id;
@@ -684,6 +726,7 @@ test("narrative route persists the accepted narrative source against the given i
 
 test("narrative route reports persistenceAvailable=false without failing the request when the D1 update throws", async () => {
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "rules", text: "Rules narrative." }),
     updateNarrativeSource: async () => {
       throw new Error("D1 unavailable");
@@ -706,6 +749,7 @@ test("narrative route sends only approved data to the internal notification afte
   let persisted = false;
   const expectedServerResult = buildAssessmentResult(validPayload.answers);
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
     updateNarrativeSource: async () => {
       persisted = true;
@@ -749,6 +793,7 @@ test("narrative route sends only approved data to the internal notification afte
 
 test("narrative route returns the accepted narrative when internal notification declines it", async () => {
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
     updateNarrativeSource: async () => {},
     sendInternalNotification: async () => ({ accepted: false }),
@@ -766,6 +811,7 @@ test("narrative route returns the accepted narrative when internal notification 
 
 test("narrative route converts an unexpected internal notification error to an unaccepted notification", async () => {
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "ai", text: "An AI narrative." }),
     updateNarrativeSource: async () => {},
     sendInternalNotification: async () => {
@@ -786,6 +832,7 @@ test("narrative route converts an unexpected internal notification error to an u
 test("narrative route sends a clearly labeled rules fallback to internal notification", async () => {
   let notificationInput = null;
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "rules", text: "Rules narrative." }),
     updateNarrativeSource: async () => {},
     sendInternalNotification: async (input) => {
@@ -806,6 +853,7 @@ test("narrative route sends a clearly labeled rules fallback to internal notific
 test("narrative route uses the same assessment id for each internal notification retry", async () => {
   const notifiedIds = [];
   const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
     generateNarrative: async () => ({ source: "rules", text: "Rules narrative." }),
     updateNarrativeSource: async () => {},
     sendInternalNotification: async ({ assessmentId: id }) => {

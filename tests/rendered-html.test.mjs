@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 
 async function request(path = "/", init, env = {}) {
@@ -240,18 +240,18 @@ test("assessment and paid diagnostic remain separate, non-overlapping routes", a
   );
 });
 
-test("privacy route describes compact retention and the contact-page deletion channel", async () => {
+test("privacy route describes the 90-day retention policy and deletion channel", async () => {
   const response = await request("/privacy");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /compact record is retained/i);
+  assert.match(html, /compact D1 record retains/i);
   assert.match(
     html,
-    /retained for a period that will be set and published here before this feature is enabled in production/i,
+    /retained for up to 90 days, then deleted/i,
   );
   assert.match(
     html,
-    /request correction or deletion of any retained assessment record using the contact page/i,
+    /request correction or deletion of inquiry or assessment information before the 90-day deletion deadline by using the contact page/i,
   );
 });
 
@@ -340,7 +340,7 @@ test("contact endpoint does not claim delivery when email is not configured", as
       ownerHours: "11-20 hours",
       reportingMaturity: "Mostly manual",
       timeframe: "Within 90 days",
-      employeeCount: "25–100",
+      employeeCount: "25Ã¢â‚¬â€œ100",
       bottleneck: "Too many operating decisions still depend on the founder.",
       desiredOutcome: "A practical operating system that gives the team more autonomy.",
     }),

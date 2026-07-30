@@ -39,6 +39,7 @@ export function createAssessmentCalculationHandler(
       id: assessmentId,
       lead: parsed.lead,
       result,
+      role: parsed.answers.role,
     });
 
     let persistenceAvailable = true;

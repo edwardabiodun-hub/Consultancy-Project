@@ -13,6 +13,7 @@ export const assessmentRecords = sqliteTable("assessment_records", {
   name: text("name"),
   workEmail: text("work_email"),
   company: text("company"),
+  role: text("role"),
   phone: text("phone"),
   reportConsent: integer("report_consent", { mode: "boolean" })
     .notNull()
@@ -51,6 +52,11 @@ export const assessmentRecords = sqliteTable("assessment_records", {
   leadRoute: text("lead_route").notNull(),
   narrativeSource: text("narrative_source").notNull(),
   reportDeliveryStatus: text("report_delivery_status").notNull(),
+  internalNotificationStatus: text("internal_notification_status")
+    .notNull()
+    .default("pending"),
+  internalNotificationClaimedAt: text("internal_notification_claimed_at"),
+  internalNotificationSentAt: text("internal_notification_sent_at"),
 });
 
 // Privacy-conscious product analytics for the assessment funnel. Only an
@@ -67,4 +73,13 @@ export const assessmentEvents = sqliteTable("assessment_events", {
   impactConfidence: text("impact_confidence"),
   route: text("route"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const retentionCleanupRuns = sqliteTable("retention_cleanup_runs", {
+  id: text("id").primaryKey(),
+  runAt: text("run_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  cutoffAt: text("cutoff_at").notNull(),
+  assessmentRecordsDeleted: integer("assessment_records_deleted").notNull(),
+  assessmentEventsDeleted: integer("assessment_events_deleted").notNull(),
+  status: text("status").notNull(),
 });

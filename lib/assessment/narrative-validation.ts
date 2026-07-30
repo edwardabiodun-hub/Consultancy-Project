@@ -11,6 +11,7 @@ import type { ComponentId } from "./types";
 export type NarrativeDraft = {
   summary: string;
   componentObservations: Array<{ component: string; observation: string }>;
+  priorityId: string;
   priorityExplanation: string;
   limitations: string;
 };
@@ -64,6 +65,7 @@ export function isNarrativeDraftShape(value: unknown): value is NarrativeDraft {
   if (typeof candidate.summary !== "string" || candidate.summary.trim().length === 0) {
     return false;
   }
+  if (typeof candidate.priorityId !== "string" || candidate.priorityId.trim().length === 0) return false;
   if (typeof candidate.priorityExplanation !== "string" || candidate.priorityExplanation.trim().length === 0) {
     return false;
   }
@@ -89,19 +91,12 @@ const draftText = (draft: NarrativeDraft): string =>
     draft.limitations,
   ].join("\n");
 
-const extractNumbers = (text: string): number[] => {
-  const numbers: number[] = [];
-  for (const match of text.matchAll(/\$\s?([\d,]+(?:\.\d+)?)/g)) {
-    numbers.push(Number(match[1].replace(/,/g, "")));
-  }
-  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s?%/g)) {
-    numbers.push(Number(match[1]));
-  }
-  for (const match of text.matchAll(/(\d+(?:\.\d+)?)\s?(?:hours?|hrs?)\b/gi)) {
-    numbers.push(Number(match[1]));
-  }
-  return numbers;
-};
+const extractNumbers = (text: string): number[] =>
+  [...text.matchAll(/(?<![A-Za-z_])\$?\s*([0-9][\d,]*(?:\.\d+)?)(?![A-Za-z_])/g)]
+    .map((match) => Number(match[1].replace(/,/g, "")));
+
+const INVENTED_COUNT_OR_DURATION =
+  /\b\d[\d,.]*\s*(?:days?|weeks?|months?|years?|managers?|employees?|people|systems?|reports?|workflows?|decisions?|stakeholders?)\b/i;
 
 const extractSnakeCaseCodes = (text: string): string[] =>
   [...text.matchAll(/\b[a-z]+(?:_[a-z]+)+\b/g)].map((match) => match[0]);
@@ -138,11 +133,20 @@ const mentionsCapacityFigure = (numbers: number[], result: AssessmentResult): bo
   return numbers.some((value) => values.has(value));
 };
 
-const priorityExplanationWithinLibrary = (priorityExplanation: string): boolean => {
-  const lower = priorityExplanation.toLowerCase();
-  return Object.values(PRIORITY_LIBRARY).some((priority) =>
-    lower.includes(priority.title.toLowerCase()),
+const normalizeControlledText = (value: string): string =>
+  value.trim().replace(/\s+/g, " ").toLowerCase();
+
+const priorityExplanationWithinLibrary = (
+  draft: NarrativeDraft,
+  result: AssessmentResult,
+): boolean => {
+  const priority = result.interpretation.priorities.find(
+    (candidate) => candidate.component === draft.priorityId,
   );
+  if (!priority) return false;
+  const controlled = PRIORITY_LIBRARY[priority.component];
+  const expected = `${controlled.title}: ${controlled.action} Indicator: ${controlled.indicator}.`;
+  return normalizeControlledText(draft.priorityExplanation) === normalizeControlledText(expected);
 };
 
 const otherRouteCtaLabels = (result: AssessmentResult): string[] =>
@@ -192,6 +196,7 @@ export function validateNarrative(draft: NarrativeDraft, result: AssessmentResul
   const text = draftText(draft);
 
   const numbers = extractNumbers(text);
+  if (INVENTED_COUNT_OR_DURATION.test(text)) return false;
   const allowed = allowedNumbers(result);
   if (numbers.some((value) => !allowed.has(value))) return false;
 
@@ -213,7 +218,7 @@ export function validateNarrative(draft: NarrativeDraft, result: AssessmentResul
   if (!/self-reported/i.test(draft.limitations)) return false;
   if (!/not an audit/i.test(draft.limitations)) return false;
 
-  if (!priorityExplanationWithinLibrary(draft.priorityExplanation)) return false;
+  if (!priorityExplanationWithinLibrary(draft, result)) return false;
 
   if (
     result.capacity.estimateType === "directional" &&

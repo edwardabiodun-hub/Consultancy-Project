@@ -195,7 +195,7 @@ export function ContactGate({
               }
             />
             <span>
-              I consent to generate and email my assessment report using these details.
+              I consent to generate and email my assessment report and send an internal assessment notification to RunRate Advisory using these details. Assessment records and the notification are retained for up to 90 days.
             </span>
           </label>
           {showError("reportConsent") && (

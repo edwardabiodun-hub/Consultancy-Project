@@ -29,6 +29,13 @@
       "when": 1785081535428,
       "tag": "0004_marvelous_red_shift",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785368922540,
+      "tag": "0005_striped_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }

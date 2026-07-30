@@ -48,7 +48,9 @@ test("buildInternalAssessmentEmail includes the approved assessment summary and 
     String(result.score.components.ownerIndependence.score),
     String(result.score.components.operatingSystem.score),
     String(result.score.components.informationVisibility.score),
+    result.score.category,
     result.score.confidence.level,
+    result.capacity.confidence,
     result.interpretation.route,
     "AI-generated and validated",
     input.narrative.text,
@@ -84,7 +86,7 @@ test("sendInternalAssessmentEmail posts to Resend with a stable idempotency key"
 test("sendInternalAssessmentEmail declines missing configuration and Resend failures", async () => {
   assert.deepEqual(
     await sendInternalAssessmentEmail(input, { apiKey: undefined, from: "from@example.com" }),
-    { accepted: false },
+    { accepted: false, retryable: true },
   );
   assert.deepEqual(
     await sendInternalAssessmentEmail(input, {
@@ -93,6 +95,25 @@ test("sendInternalAssessmentEmail declines missing configuration and Resend fail
       to: "info@runrategroup.com",
       fetchImpl: async () => new Response("service unavailable", { status: 503 }),
     }),
-    { accepted: false },
+    { accepted: false, retryable: true },
   );
+});
+
+test("sendInternalAssessmentEmail aborts a stalled Resend request within the configured timeout", async () => {
+  let observedSignal;
+  const outcome = await sendInternalAssessmentEmail(input, {
+    apiKey: "test-key",
+    from: "from@example.com",
+    to: "info@runrategroup.com",
+    timeoutMs: 5,
+    fetchImpl: async (_url, init) => {
+      observedSignal = init.signal;
+      return await new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(init.signal.reason));
+      });
+    },
+  });
+
+  assert.equal(observedSignal.aborted, true);
+  assert.deepEqual(outcome, { accepted: false, retryable: false });
 });

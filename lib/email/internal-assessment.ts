@@ -63,8 +63,10 @@ export function buildInternalAssessmentEmail(
   <h2>Assessment summary</h2>
   <ul>
     <li>Overall score: ${escapeHtml(input.result.score.overall)}</li>
+    <li>Score category: ${escapeHtml(input.result.score.category)}</li>
     ${components}
     <li>Score confidence: ${escapeHtml(input.result.score.confidence.level)}</li>
+    <li>Impact confidence: ${escapeHtml(input.result.capacity.confidence)}</li>
     <li>Route: ${escapeHtml(input.result.interpretation.route)}</li>
     <li>Narrative source: ${escapeHtml(sourceLabel)}</li>
   </ul>
@@ -78,12 +80,14 @@ export function buildInternalAssessmentEmail(
 export async function sendInternalAssessmentEmail(
   input: InternalAssessmentEmailInput,
   config: EmailConfig = {},
-): Promise<{ accepted: boolean }> {
+): Promise<{ accepted: boolean; retryable?: boolean }> {
   const apiKey = config.apiKey ?? process.env.RESEND_API_KEY;
   const from = config.from ?? process.env.CONTACT_FROM_EMAIL;
   const to = config.to ?? process.env.CONTACT_TO_EMAIL;
   const fetchImpl = config.fetchImpl ?? fetch;
-  if (!apiKey || !from || !to) return { accepted: false };
+  if (!apiKey || !from || !to) return { accepted: false, retryable: true };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? 5000);
 
   const email = buildInternalAssessmentEmail(input);
   try {
@@ -95,9 +99,14 @@ export async function sendInternalAssessmentEmail(
         "Idempotency-Key": email.idempotencyKey,
       },
       body: JSON.stringify({ from, to: [to], subject: email.subject, html: email.html }),
+      signal: controller.signal,
     });
-    return { accepted: response.ok };
+    return response.ok
+      ? { accepted: true }
+      : { accepted: false, retryable: true };
   } catch {
-    return { accepted: false };
+    return { accepted: false, retryable: false };
+  } finally {
+    clearTimeout(timeout);
   }
 }

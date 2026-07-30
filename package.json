@@ -10,7 +10,7 @@
     "build": "vinext build",
     "start": "vinext start",
     "test:domain": "node --import=tsx --test tests/assessment/*.test.mjs",
-    "test:component": "node --import=tsx --test tests/component/*.test.mjs",
+    "test:component": "node --max-old-space-size=1024 --import=tsx --test tests/component/*.test.mjs",
     "test": "npm run test:deployment && npm run test:domain && npm run test:component && npm run build && node --test tests/rendered-html.test.mjs",
     "test:e2e": "playwright test",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
