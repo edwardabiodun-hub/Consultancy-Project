@@ -1,4 +1,7 @@
-type D1Result = { meta?: { changes?: number } };
+type D1Result = {
+  meta?: { changes?: number };
+  results?: Array<{ count?: number | string }>;
+};
 type BoundStatement = { run(): Promise<unknown> };
 type RetentionDatabase = {
   prepare(sql: string): { bind(...values: unknown[]): BoundStatement };
@@ -13,8 +16,8 @@ type CleanupOptions = {
 const sqliteTimestamp = (date: Date): string =>
   date.toISOString().slice(0, 19).replace("T", " ");
 
-const changes = (result: D1Result | undefined): number =>
-  Number(result?.meta?.changes ?? 0);
+const preDeleteCount = (result: D1Result | undefined): number =>
+  Number(result?.results?.[0]?.count ?? 0);
 
 export async function runAssessmentRetentionCleanup(
   db: RetentionDatabase,
@@ -27,21 +30,40 @@ export async function runAssessmentRetentionCleanup(
   const now = options.now ?? new Date();
   const cutoffDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
   const cutoff = sqliteTimestamp(cutoffDate);
-  const deleteRelatedEvents = db.prepare(
-    "DELETE FROM assessment_events WHERE assessment_id IN (SELECT id FROM assessment_records WHERE created_at < ?)",
+  const id = (options.createId ?? (() => crypto.randomUUID()))();
+  const expiredEventsWhere = "created_at < ? OR assessment_id IN (SELECT id FROM assessment_records WHERE created_at < ?)";
+
+  const countExpiredEvents = db.prepare(
+    `SELECT COUNT(*) AS count FROM assessment_events WHERE ${expiredEventsWhere}`,
+  ).bind(cutoff, cutoff);
+  const countExpiredRecords = db.prepare(
+    "SELECT COUNT(*) AS count FROM assessment_records WHERE created_at < ?",
   ).bind(cutoff);
-  const deleteOldEvents = db.prepare(
-    "DELETE FROM assessment_events WHERE created_at < ?",
-  ).bind(cutoff);
-  const deleteRecords = db.prepare(
+  const writeAudit = db.prepare(
+    `INSERT INTO retention_cleanup_runs (id, cutoff_at, assessment_records_deleted, assessment_events_deleted, status)
+     SELECT ?, ?,
+       (SELECT COUNT(*) FROM assessment_records WHERE created_at < ?),
+       (SELECT COUNT(*) FROM assessment_events WHERE ${expiredEventsWhere}),
+       ?`,
+  ).bind(id, cutoff, cutoff, cutoff, cutoff, "completed");
+  const deleteExpiredEvents = db.prepare(
+    `DELETE FROM assessment_events WHERE ${expiredEventsWhere}`,
+  ).bind(cutoff, cutoff);
+  const deleteExpiredRecords = db.prepare(
     "DELETE FROM assessment_records WHERE created_at < ?",
   ).bind(cutoff);
-  const results = await db.batch([deleteRelatedEvents, deleteOldEvents, deleteRecords]);
-  const assessmentEventsDeleted = changes(results[0]) + changes(results[1]);
-  const assessmentRecordsDeleted = changes(results[2]);
-  const id = (options.createId ?? (() => crypto.randomUUID()))();
-  await db.prepare(
-    "INSERT INTO retention_cleanup_runs (id, cutoff_at, assessment_records_deleted, assessment_events_deleted, status) VALUES (?, ?, ?, ?, ?)",
-  ).bind(id, cutoff, assessmentRecordsDeleted, assessmentEventsDeleted, "completed").run();
-  return { cutoff, assessmentEventsDeleted, assessmentRecordsDeleted };
+
+  const results = await db.batch([
+    countExpiredEvents,
+    countExpiredRecords,
+    writeAudit,
+    deleteExpiredEvents,
+    deleteExpiredRecords,
+  ]);
+
+  return {
+    cutoff,
+    assessmentEventsDeleted: preDeleteCount(results[0]),
+    assessmentRecordsDeleted: preDeleteCount(results[1]),
+  };
 }

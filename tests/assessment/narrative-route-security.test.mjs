@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAssessmentNarrativeHandler } from "../../app/api/assessment/[id]/narrative/route.ts";
+import {
+  createAssessmentNarrativeHandler,
+  isStaleInternalNotificationLease,
+} from "../../app/api/assessment/[id]/narrative/route.ts";
 import { QUESTION_BANK } from "../../lib/assessment/questions.ts";
 import { toAssessmentRecord } from "../../lib/assessment/record.ts";
 import { buildAssessmentResult } from "../../lib/assessment/result.ts";
 
 const assessmentId = "8d7b76ca-86bf-46a6-88f4-42b6dfecd159";
+
+test("stale internal-notification sending leases can be reclaimed, while indeterminate and unbounded claims stay protected", () => {
+  const now = new Date("2026-07-29T12:00:00.000Z");
+  assert.equal(isStaleInternalNotificationLease("sending", "2026-07-29T11:49:59.999Z", now), true);
+  assert.equal(isStaleInternalNotificationLease("sending", "2026-07-29T11:50:00.000Z", now), false);
+  assert.equal(isStaleInternalNotificationLease("sending", null, now), false);
+  assert.equal(isStaleInternalNotificationLease("indeterminate", "2026-07-29T11:00:00.000Z", now), false);
+});
 const payload = {
   answers: {
     employeeBand: "20-49", managerBand: "3-5", revenueBand: "5m-20m",

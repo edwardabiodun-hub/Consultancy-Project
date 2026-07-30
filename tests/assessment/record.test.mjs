@@ -272,3 +272,68 @@ test("calculation handler returns the recomputed result when D1 is unavailable",
   assert.equal(body.result.score.overall, 50);
   assert.equal("reportDeliveryStatus" in body, false);
 });
+test("calculation handler rejects an over-limit client before creating an id or writing D1", async () => {
+  let idsCreated = 0;
+  let recordsPersisted = 0;
+  const handler = createAssessmentCalculationHandler({
+    checkRateLimit: async () => false,
+    createId: () => {
+      idsCreated += 1;
+      return "should-not-be-created";
+    },
+    persistRecord: async () => {
+      recordsPersisted += 1;
+    },
+  });
+
+  const response = await handler(new Request(
+    "https://example.com/api/assessment/calculate",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": "203.0.113.41",
+      },
+      body: JSON.stringify(validPayload),
+    },
+  ));
+
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "60");
+  assert.equal(idsCreated, 0);
+  assert.equal(recordsPersisted, 0);
+});
+
+test("calculation handler returns and persists the deterministic result within the client limit", async () => {
+  let rateChecks = 0;
+  const persisted = [];
+  const handler = createAssessmentCalculationHandler({
+    checkRateLimit: async () => {
+      rateChecks += 1;
+      return true;
+    },
+    createId: () => "assessment-within-limit",
+    persistRecord: async (record) => {
+      persisted.push(record);
+    },
+  });
+
+  const response = await handler(new Request(
+    "https://example.com/api/assessment/calculate",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": "203.0.113.41",
+      },
+      body: JSON.stringify(validPayload),
+    },
+  ));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(rateChecks, 1);
+  assert.equal(body.result.score.overall, 50);
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].id, "assessment-within-limit");
+});

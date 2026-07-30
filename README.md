@@ -176,13 +176,17 @@ npm run db:generate
 
 This runs `drizzle-kit generate` and writes a new numbered SQL migration into
 `drizzle/` (see `drizzle/0001_assessment_records.sql` through
-`drizzle/0004_marvelous_red_shift.sql` for the assessment-record schema
+`drizzle/0005_striped_wilson_fisk.sql` for the assessment-record schema
 history) plus a matching snapshot in `drizzle/meta/`. `drizzle.config.ts`
 targets the `sqlite` dialect against `db/schema.ts`. This repository only
 generates migration SQL; applying generated migrations to a live D1 database
 is a deployment-time step for whichever hosting/CI process owns the `DB`
 binding referenced in `.openai/hosting.json`, and is outside the scope of
 this codebase.
+
+Before enabling the visitor narrative endpoint in production, apply
+`drizzle/0005_striped_wilson_fisk.sql`. It adds the persisted role and internal
+notification claim fields. Pre-migration role-null records are rejected by the narrative endpoint rather than allowing a weaker match; submit a new assessment after migration.
 
 ### Local rules-only mode
 
@@ -232,7 +236,7 @@ run, not just manually.
 ### Data deletion procedure
 
 Compact D1 assessment records and related assessment events are retained for up
-to 90 days. A daily Cloudflare scheduled cleanup deletes expired data and writes
+to 90 days. A Cloudflare cleanup scheduled for 03:17 UTC each day deletes expired data and writes
 the cutoff and deletion counts to `retention_cleanup_runs` for auditability.
 Narrative prose is not stored in D1. The internal notification mailbox copy sent
 to `info@runrategroup.com` contains name, email, company, role, deterministic

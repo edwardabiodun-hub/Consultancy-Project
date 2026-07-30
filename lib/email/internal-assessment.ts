@@ -1,4 +1,4 @@
-import type { NarrativeOutcome } from "../assessment/narrative";
+﻿import type { NarrativeOutcome } from "../assessment/narrative";
 import type { AssessmentResult } from "../assessment/result";
 
 export type InternalAssessmentEmailInput = {
@@ -13,6 +13,7 @@ type EmailConfig = {
   from?: string;
   to?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 };
 
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";

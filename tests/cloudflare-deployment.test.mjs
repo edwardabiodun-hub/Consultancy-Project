@@ -26,6 +26,10 @@ test("Cloudflare deployment config exposes the Worker, assets, Images, and D1 bi
   assert.equal(config.d1_databases[0].database_name, "runrate-advisory-production");
   assert.match(config.d1_databases[0].database_id, /^[0-9a-f-]{36}$/);
   assert.equal(config.d1_databases[0].migrations_dir, "drizzle");
+  const calculationLimiter = config.ratelimits.find((limiter) => limiter.name === "ASSESSMENT_CALCULATION_RATE_LIMITER");
+  assert.ok(calculationLimiter, "calculation requests need a dedicated Cloudflare rate-limit binding");
+  assert.equal(calculationLimiter.simple.period, 60);
+  assert.ok(calculationLimiter.simple.limit > 0);
 });
 
 test("the Vite Cloudflare plugin reads the committed Wrangler config", async () => {

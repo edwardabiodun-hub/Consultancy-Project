@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, or } from "drizzle-orm";
 import type { assessmentRecords } from "../../../../../db/schema";
 import { toAssessmentRecord } from "../../../../../lib/assessment/record";
 import { buildAssessmentResult } from "../../../../../lib/assessment/result";
@@ -60,16 +60,38 @@ const updateStoredNarrativeSource = async (id: string, source: NarrativeOutcome[
 const changedRows = (result: unknown): number =>
   Number((result as { meta?: { changes?: number } })?.meta?.changes ?? 0);
 
+export const INTERNAL_NOTIFICATION_LEASE_MS = 10 * 60 * 1000;
+
+export const isStaleInternalNotificationLease = (
+  status: string | null | undefined,
+  claimedAt: string | null | undefined,
+  now: Date = new Date(),
+): boolean => {
+  if (status !== "sending" || !claimedAt) return false;
+  const claimedAtMs = Date.parse(claimedAt);
+  return Number.isFinite(claimedAtMs)
+    && now.getTime() - claimedAtMs > INTERNAL_NOTIFICATION_LEASE_MS;
+};
+
 const claimStoredInternalNotification = async (id: string): Promise<NotificationClaim> => {
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"), import("../../../../../db/schema"),
   ]);
   const db = getDb();
+  const now = new Date();
+  const staleLeaseCutoff = new Date(now.getTime() - INTERNAL_NOTIFICATION_LEASE_MS).toISOString();
   const claimed = await db.update(assessmentRecords)
-    .set({ internalNotificationStatus: "sending", internalNotificationClaimedAt: new Date().toISOString() })
+    .set({ internalNotificationStatus: "sending", internalNotificationClaimedAt: now.toISOString() })
     .where(and(
       eq(assessmentRecords.id, id),
-      inArray(assessmentRecords.internalNotificationStatus, ["pending", "failed"]),
+      or(
+        inArray(assessmentRecords.internalNotificationStatus, ["pending", "failed"]),
+        and(
+          eq(assessmentRecords.internalNotificationStatus, "sending"),
+          isNotNull(assessmentRecords.internalNotificationClaimedAt),
+          lt(assessmentRecords.internalNotificationClaimedAt, staleLeaseCutoff),
+        ),
+      ),
     ))
     .run();
   if (changedRows(claimed) === 1) return "claimed";

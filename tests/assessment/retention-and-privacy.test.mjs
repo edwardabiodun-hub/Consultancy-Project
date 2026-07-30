@@ -5,7 +5,7 @@ import { runAssessmentRetentionCleanup } from "../../lib/retention/assessment.ts
 
 const projectRoot = new URL("../../", import.meta.url);
 
-test("retention cleanup deletes D1 assessment data older than 90 days and writes an audit row", async () => {
+test("retention cleanup atomically audits pre-delete counts before deleting 90-day-expired D1 data", async () => {
   const prepared = [];
   const auditRuns = [];
   const db = {
@@ -19,10 +19,12 @@ test("retention cleanup deletes D1 assessment data older than 90 days and writes
       };
     },
     async batch(statements) {
-      assert.equal(statements.length, 3);
+      assert.equal(statements.length, 5);
       return [
-        { meta: { changes: 4 } },
-        { meta: { changes: 2 } },
+        { results: [{ count: 6 }] },
+        { results: [{ count: 3 }] },
+        { meta: { changes: 1 } },
+        { meta: { changes: 6 } },
         { meta: { changes: 3 } },
       ];
     },
@@ -39,21 +41,25 @@ test("retention cleanup deletes D1 assessment data older than 90 days and writes
     assessmentEventsDeleted: 6,
     assessmentRecordsDeleted: 3,
   });
-  assert.match(prepared[0].sql, /DELETE FROM assessment_events/i);
-  assert.match(prepared[1].sql, /DELETE FROM assessment_events/i);
-  assert.match(prepared[2].sql, /DELETE FROM assessment_records/i);
-  assert.ok(prepared.slice(0, 3).every((statement) => statement.values[0] === result.cutoff));
-  assert.equal(auditRuns.length, 1);
-  assert.match(auditRuns[0].sql, /INSERT INTO retention_cleanup_runs/i);
-  assert.deepEqual(auditRuns[0].values, ["cleanup-1", result.cutoff, 3, 6, "completed"]);
+  assert.match(prepared[0].sql, /SELECT COUNT\(\*\)/i);
+  assert.match(prepared[1].sql, /SELECT COUNT\(\*\)/i);
+  assert.match(prepared[2].sql, /INSERT INTO retention_cleanup_runs/i);
+  assert.match(prepared[3].sql, /DELETE FROM assessment_events/i);
+  assert.match(prepared[4].sql, /DELETE FROM assessment_records/i);
+  assert.ok(prepared.every((statement) => statement.values.includes(result.cutoff)));
+  assert.equal(auditRuns.length, 0, "audit insert must be part of the same D1 batch");
 });
 
-test("Cloudflare configuration schedules retention cleanup and rate-limits narrative requests", async () => {
+test("Cloudflare configuration schedules daily retention cleanup and rate-limits narrative and calculation requests", async () => {
   const config = JSON.parse(await readFile(new URL("wrangler.jsonc", projectRoot), "utf8"));
   assert.deepEqual(config.triggers.crons, ["17 3 * * *"]);
   assert.equal(config.ratelimits[0].name, "NARRATIVE_RATE_LIMITER");
   assert.equal(config.ratelimits[0].simple.limit, 3);
   assert.equal(config.ratelimits[0].simple.period, 60);
+  const calculationLimiter = config.ratelimits.find((limiter) => limiter.name === "ASSESSMENT_CALCULATION_RATE_LIMITER");
+  assert.ok(calculationLimiter);
+  assert.equal(calculationLimiter.simple.period, 60);
+  assert.ok(calculationLimiter.simple.limit > 0);
   const worker = await readFile(new URL("worker/index.ts", projectRoot), "utf8");
   assert.match(worker, /scheduled\s*\(/);
   assert.match(worker, /runAssessmentRetentionCleanup/);
@@ -67,6 +73,7 @@ test("privacy, consent, and operations docs disclose internal narrative email an
   ]);
   for (const source of [privacy, readme]) {
     assert.match(source, /90 days/i);
+    assert.match(source, /03:17 UTC/i);
     assert.match(source, /info@runrategroup\.com/i);
     assert.match(source, /name.*email.*company.*role/is);
     assert.match(source, /OpenAI.*(?:no|not).*identity.*raw answers/is);
@@ -75,4 +82,6 @@ test("privacy, consent, and operations docs disclose internal narrative email an
   }
   assert.match(gate, /internal assessment notification/i);
   assert.match(gate, /90 days/i);
+  assert.match(readme, /0005_striped_wilson_fisk\.sql/i);
+  assert.match(readme, /role.*null.*narrative/i);
 });
