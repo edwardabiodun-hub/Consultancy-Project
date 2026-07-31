@@ -195,6 +195,14 @@ test("assessment PDF has the exact seven-page executive content contract", async
       assert.match(pages[index], new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     }
   });
+  for (const pageIndex of [0, 6]) {
+    assert.match(pages[pageIndex], /complete submitted answers/i);
+    assert.match(pages[pageIndex], /generated PDF/i);
+    assert.match(pages[pageIndex], /accepted narrative/i);
+    assert.match(pages[pageIndex], /secure report storage/i);
+    assert.match(pages[pageIndex], /90 days/i);
+  }
+  assert.doesNotMatch(pages.join(" "), /raw answers[^.]*not retained/i);
   assert.equal([...pages.join(" ")].some((character) => character.charCodeAt(0) > 127), false);
 });
 

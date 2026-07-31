@@ -435,3 +435,93 @@ test("deliver route leaves delivery status unchanged and keeps the record when R
   );
   assert.equal(markDeliveredCalled, false);
 });
+
+test("concurrent delivery requests produce only one external send", async () => {
+  let deliveryState = "pending";
+  let sendCount = 0;
+  let releaseSend;
+  const sendReleased = new Promise((resolve) => { releaseSend = resolve; });
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({ ...baseDeliveryRecord, reportDeliveryStatus: deliveryState }),
+    claimDelivery: async () => {
+      if (deliveryState !== "pending") return { status: "busy" };
+      deliveryState = "sending:claim-1";
+      return { status: "claimed", token: "sending:claim-1" };
+    },
+    finalizeDelivery: async (_id, token, outcome) => {
+      if (deliveryState === token) deliveryState = outcome === "sent" ? "sent" : "failed";
+    },
+  });
+  await withEnv(
+    { RESEND_API_KEY: "test-key", ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com" },
+    () => withMockedFetch(async () => {
+      sendCount += 1;
+      await sendReleased;
+      return new Response("{}", { status: 200 });
+    }, async () => {
+      const first = handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      const second = handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      releaseSend();
+      const bodies = await Promise.all([first, second].map(async (response) => (await response).json()));
+      assert.deepEqual(bodies.map((body) => body.status).sort(), ["already_sent", "sent"]);
+    }),
+  );
+  assert.equal(sendCount, 1);
+});
+
+test("a delivery finalization failure cannot trigger a duplicate send", async () => {
+  let claimed = false;
+  let sendCount = 0;
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({ ...baseDeliveryRecord }),
+    claimDelivery: async () => {
+      if (claimed) return { status: "busy" };
+      claimed = true;
+      return { status: "claimed", token: "sending:claim-1" };
+    },
+    finalizeDelivery: async () => { throw new Error("D1 unavailable"); },
+  });
+  await withEnv(
+    { RESEND_API_KEY: "test-key", ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com" },
+    () => withMockedFetch(async (_input, init) => {
+      sendCount += 1;
+      assert.equal(init.headers["Idempotency-Key"], `assessment-report-${assessmentId}`);
+      return new Response("{}", { status: 200 });
+    }, async () => {
+      await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+    }),
+  );
+  assert.equal(sendCount, 1);
+});
+
+test("a confirmed failed send releases the claim for one retry", async () => {
+  let state = "pending";
+  let sendCount = 0;
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({ ...baseDeliveryRecord, reportDeliveryStatus: state }),
+    claimDelivery: async () => {
+      if (!["pending", "failed"].includes(state)) return { status: "busy" };
+      state = `sending:claim-${sendCount + 1}`;
+      return { status: "claimed", token: state };
+    },
+    finalizeDelivery: async (_id, token, outcome) => {
+      if (state === token) state = outcome;
+    },
+  });
+  await withEnv(
+    { RESEND_API_KEY: "test-key", ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com" },
+    () => withMockedFetch(async () => {
+      sendCount += 1;
+      return new Response("{}", { status: sendCount === 1 ? 503 : 200 });
+    }, async () => {
+      const first = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      const second = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      assert.equal(first.status, 503);
+      assert.equal(second.status, 200);
+    }),
+  );
+  assert.equal(sendCount, 2);
+  assert.equal(state, "sent");
+});

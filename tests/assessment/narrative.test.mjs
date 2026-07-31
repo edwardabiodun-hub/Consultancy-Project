@@ -401,3 +401,37 @@ test("narrative route uses the same assessment id for each internal notification
 
   assert.deepEqual(notifiedIds, [assessmentId, assessmentId]);
 });
+
+test("concurrent narrative completions allow only one report storage writer", async () => {
+  let storageClaimed = false;
+  let persistenceCalls = 0;
+  let releasePersistence;
+  const persistenceReleased = new Promise((resolve) => { releasePersistence = resolve; });
+  const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
+    generateNarrative: async () => routeAiNarrative,
+    updateNarrativeSource: async () => {},
+    claimReportStorage: async () => {
+      if (storageClaimed) return { status: "busy" };
+      storageClaimed = true;
+      return { status: "claimed", token: "storing:claim-1" };
+    },
+    persistFullReportSnapshot: async () => {
+      persistenceCalls += 1;
+      await persistenceReleased;
+    },
+  });
+
+  const first = handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  const second = handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  releasePersistence();
+  const responses = await Promise.all([first, second]);
+
+  assert.deepEqual(responses.map((response) => response.status), [200, 200]);
+  assert.equal(persistenceCalls, 1);
+});

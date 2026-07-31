@@ -62,6 +62,7 @@ type PersistFullReportSnapshotDependencies = {
   buildPdf?: typeof buildAssessmentPdf;
   updateMetadata: (metadata: ReportStorageMetadata) => Promise<void>;
   now?: () => Date;
+  ownsClaim?: () => Promise<boolean>;
 };
 
 export type StoredPdfLoadResult =
@@ -219,21 +220,34 @@ export async function persistFullReportSnapshot(
       reportStorageStatus: "stored",
       reportStoredAt: (dependencies.now ?? (() => new Date()))().toISOString(),
     };
+    if (dependencies.ownsClaim && !(await dependencies.ownsClaim())) {
+      throw new Error("Report storage claim lost before finalization");
+    }
     await dependencies.updateMetadata(metadata);
     return metadata;
   } catch (error) {
-    try {
-      await dependencies.reportStorage.deleteReportObjects(keys);
-    } catch {
-      // Best-effort cleanup: storage_failed remains authoritative in D1.
+    let ownsClaim = true;
+    if (dependencies.ownsClaim) {
+      try {
+        ownsClaim = await dependencies.ownsClaim();
+      } catch {
+        ownsClaim = false;
+      }
     }
-    try {
-      await dependencies.updateMetadata({
-        reportStorageStatus: "storage_failed",
-        reportStoredAt: null,
-      });
-    } catch {
-      // Preserve the original storage failure for the caller.
+    if (ownsClaim) {
+      try {
+        await dependencies.reportStorage.deleteReportObjects(keys);
+      } catch {
+        // Best-effort cleanup: storage_failed remains authoritative in D1.
+      }
+      try {
+        await dependencies.updateMetadata({
+          reportStorageStatus: "storage_failed",
+          reportStoredAt: null,
+        });
+      } catch {
+        // Preserve the original storage failure for the caller.
+      }
     }
     throw error;
   }

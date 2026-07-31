@@ -482,8 +482,8 @@ const formatDate = (value: string) => {
 
 const evidenceSummary = (finding: Finding) =>
   finding.component
-    ? `Normalized ${finding.kind} finding for ${COMPONENTS[finding.component].label}; question-level responses are not retained.`
-    : `Normalized ${finding.kind} finding; question-level responses are not retained.`;
+    ? `Normalized ${finding.kind} finding for ${COMPONENTS[finding.component].label}; the PDF presents a controlled evidence summary.`
+    : `Normalized ${finding.kind} finding; the PDF presents a controlled evidence summary.`;
 
 const findingLabel = (finding: Finding) =>
   FINDING_LABELS[finding.code] ??
@@ -787,7 +787,7 @@ export async function buildAssessmentPdf(
   );
   drawAt(
     cover,
-    "The report is reconstructed from controlled compact fields. Raw answers and free-text narratives are not retained.",
+    "Complete submitted answers, the generated PDF, and the accepted narrative are retained for 90 days in secure report storage.",
     { size: 9, lineHeight: 12, color: COLORS.muted },
   );
 
@@ -1083,7 +1083,7 @@ export async function buildAssessmentPdf(
   label(methodology, "Limitations");
   drawAt(
     methodology,
-    "Raw answers, question-level evidence, and free-text narratives are not retained. Findings are reconstructed from normalized derived codes and remain directional; causes require validation.",
+    "Complete submitted answers, the generated PDF, and the accepted narrative are retained for 90 days in secure report storage. Findings remain directional; causes require validation.",
     { size: 8, lineHeight: 11, gapAfter: 7, color: COLORS.muted },
   );
   label(methodology, "Professional boundary");

@@ -29,6 +29,9 @@ type RouteContext = { params: Promise<{ id: string }> };
 type NotificationClaim = "claimed" | "sent" | "busy";
 type NotificationOutcome = "sent" | "failed" | "indeterminate";
 type NarrativeAttemptClaim = "claimed" | "already_attempted";
+type ReportStorageClaim =
+  | { status: "claimed"; token: string }
+  | { status: "busy" | "stored" };
 type NotificationInput = Parameters<typeof sendInternalAssessmentEmail>[0];
 type HandlerDependencies = {
   findRecord: (id: string) => Promise<AssessmentRecord | null>;
@@ -52,8 +55,10 @@ type HandlerDependencies = {
   claimInternalNotification: (id: string, payloadHash: string) => Promise<NotificationClaim>;
   finalizeInternalNotification: (id: string, outcome: NotificationOutcome) => Promise<void>;
   sendInternalNotification: typeof sendInternalAssessmentEmail;
+  claimReportStorage: (id: string, currentStatus: string | null) => Promise<ReportStorageClaim>;
   persistFullReportSnapshot: (
     input: PersistFullReportSnapshotInput,
+    claimToken: string,
   ) => Promise<unknown>;
 };
 
@@ -81,6 +86,7 @@ type ReportsBucket = {
 
 const persistStoredFullReportSnapshot = async (
   input: PersistFullReportSnapshotInput,
+  claimToken: string,
 ): Promise<void> => {
   const [{ getDb }, { assessmentRecords }, { env }] = await Promise.all([
     import("../../../../../db"),
@@ -91,7 +97,22 @@ const persistStoredFullReportSnapshot = async (
     await getDb()
       .update(assessmentRecords)
       .set(metadata)
-      .where(eq(assessmentRecords.id, input.assessmentId));
+      .where(and(
+        eq(assessmentRecords.id, input.assessmentId),
+        eq(assessmentRecords.reportStorageStatus, claimToken),
+      ))
+      .run();
+  };
+  const ownsClaim = async () => {
+    const [current] = await getDb()
+      .select({ status: assessmentRecords.reportStorageStatus })
+      .from(assessmentRecords)
+      .where(and(
+        eq(assessmentRecords.id, input.assessmentId),
+        eq(assessmentRecords.reportStorageStatus, claimToken),
+      ))
+      .limit(1);
+    return current?.status === claimToken;
   };
   const bucket = (env as unknown as { REPORTS?: ReportsBucket }).REPORTS;
   if (!bucket) {
@@ -104,6 +125,7 @@ const persistStoredFullReportSnapshot = async (
   await persistReportSnapshot(input, {
     reportStorage: createReportStorage(bucket),
     updateMetadata,
+    ownsClaim,
   });
 };
 
@@ -146,6 +168,32 @@ const updateStoredNarrativeSource = async (
 
 const changedRows = (result: unknown): number =>
   Number((result as { meta?: { changes?: number } })?.meta?.changes ?? 0);
+
+const claimStoredReportStorage = async (
+  id: string,
+  currentStatus: string | null,
+): Promise<ReportStorageClaim> => {
+  if (currentStatus === "stored") return { status: "stored" };
+  if (currentStatus !== null && currentStatus !== "storage_failed") {
+    return { status: "busy" };
+  }
+  const [{ getDb }, { assessmentRecords }] = await Promise.all([
+    import("../../../../../db"),
+    import("../../../../../db/schema"),
+  ]);
+  const token = `storing:${new Date().toISOString()}:${crypto.randomUUID()}`;
+  const statusPredicate = currentStatus === null
+    ? isNull(assessmentRecords.reportStorageStatus)
+    : eq(assessmentRecords.reportStorageStatus, currentStatus);
+  const claimed = await getDb()
+    .update(assessmentRecords)
+    .set({ reportStorageStatus: token, reportStoredAt: null })
+    .where(and(eq(assessmentRecords.id, id), statusPredicate))
+    .run();
+  return changedRows(claimed) === 1
+    ? { status: "claimed", token }
+    : { status: "busy" };
+};
 
 const claimStoredNarrativeAttempt = async (id: string): Promise<NarrativeAttemptClaim> => {
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
@@ -318,6 +366,10 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
   const claimInternalNotification = dependencies.claimInternalNotification ?? claimStoredInternalNotification;
   const finalizeInternalNotification = dependencies.finalizeInternalNotification ?? finalizeStoredInternalNotification;
   const sendInternalNotification = dependencies.sendInternalNotification ?? sendInternalAssessmentEmail;
+  const claimReportStorage = dependencies.claimReportStorage
+    ?? (dependencies.persistFullReportSnapshot
+      ? async () => ({ status: "claimed", token: "injected-storage-claim" } as const)
+      : claimStoredReportStorage);
   const persistFullReportSnapshot = dependencies.persistFullReportSnapshot
     ?? persistStoredFullReportSnapshot;
 
@@ -470,6 +522,8 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
         narrative,
       });
       try {
+        const storageClaim = await claimReportStorage(id, record.reportStorageStatus);
+        if (storageClaim.status !== "claimed") throw new Error("Report storage already claimed");
         await persistFullReportSnapshot({
           assessmentId: id,
           assessmentVersion: result.methodologyVersion,
@@ -479,7 +533,7 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
           result,
           narrative,
           reportRecord,
-        });
+        }, storageClaim.token);
       } catch {
         // D1 retains storage_failed; compact report reconstruction and the
         // accepted on-screen result remain available.

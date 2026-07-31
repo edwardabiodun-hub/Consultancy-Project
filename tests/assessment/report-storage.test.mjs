@@ -187,3 +187,47 @@ test("full report persistence records storage_failed after an object write fails
   );
   assert.deepEqual(metadata, [{ reportStorageStatus: "storage_failed", reportStoredAt: null }]);
 });
+
+test("stored PDF retrieval returns bytes only when the real SHA-256 matches", async () => {
+  const reportStorageModule = await import("../../lib/report/storage.ts");
+  const bytes = Uint8Array.from([37, 80, 68, 70, 45, 109, 97, 116, 99, 104]);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const hash = [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  const bucket = { get: async () => ({ arrayBuffer: async () => bytes.buffer }) };
+
+  const result = await reportStorageModule.readStoredReportPdf(
+    bucket,
+    `assessments/${assessmentId}/report.pdf`,
+    hash,
+  );
+  assert.equal(result.status, "found");
+  assert.deepEqual(result.bytes, bytes);
+});
+
+test("a persistence attempt that lost its claim never deletes another attempt's objects", async () => {
+  const reportStorageModule = await import("../../lib/report/storage.ts");
+  let deleteCount = 0;
+  const reportStorage = {
+    putPdf: async (key) => ({ pdfKey: key, pdfHash: "pdf-hash" }),
+    putSnapshot: async () => { throw new Error("late failure"); },
+    deleteReportObjects: async () => { deleteCount += 1; },
+  };
+
+  await assert.rejects(
+    () => reportStorageModule.persistFullReportSnapshot({
+      assessmentId,
+      assessmentVersion: "1.0.0",
+      createdAt: "2026-07-30T12:00:00.000Z",
+      lead: {}, answers: {}, result: {}, narrative: {}, reportRecord: {},
+    }, {
+      reportStorage,
+      buildPdf: async () => new Uint8Array([37, 80, 68, 70]),
+      updateMetadata: async () => {},
+      ownsClaim: async () => false,
+    }),
+    /late failure/,
+  );
+  assert.equal(deleteCount, 0);
+});
