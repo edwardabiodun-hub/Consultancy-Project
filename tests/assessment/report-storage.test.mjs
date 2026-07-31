@@ -79,3 +79,7 @@ test("deleting report objects is idempotent", async () => {
     [keys.snapshotKey, keys.pdfKey],
   ]);
 });
+
+test("canonical serialization orders object keys by Unicode code unit", () => {
+  assert.equal(canonicalJson({ a: 1, B: 2 }), '{"B":2,"a":1}');
+});
