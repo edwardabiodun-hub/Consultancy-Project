@@ -56,6 +56,12 @@ export const assessmentRecords = sqliteTable("assessment_records", {
     .default("pending"),
   narrativeAttemptedAt: text("narrative_attempted_at"),
   narrativeSelectionJson: text("narrative_selection_json"),
+  reportSnapshotKey: text("report_snapshot_key"),
+  reportPdfKey: text("report_pdf_key"),
+  reportSnapshotHash: text("report_snapshot_hash"),
+  reportPdfHash: text("report_pdf_hash"),
+  reportStorageStatus: text("report_storage_status"),
+  reportStoredAt: text("report_stored_at"),
   reportDeliveryStatus: text("report_delivery_status").notNull(),
   internalNotificationStatus: text("internal_notification_status")
     .notNull()

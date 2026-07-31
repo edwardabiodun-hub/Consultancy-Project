@@ -80,6 +80,12 @@ export function toAssessmentRecord({
     narrativeAttemptStatus: "pending" as const,
     narrativeAttemptedAt: null,
     narrativeSelectionJson: null,
+    reportSnapshotKey: null,
+    reportPdfKey: null,
+    reportSnapshotHash: null,
+    reportPdfHash: null,
+    reportStorageStatus: null,
+    reportStoredAt: null,
     reportDeliveryStatus: lead?.reportConsent
       ? ("pending" as const)
       : ("not_requested" as const),

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { QUESTION_BANK } from "../../lib/assessment/questions.ts";
 import { toAssessmentRecord } from "../../lib/assessment/record.ts";
@@ -164,6 +165,12 @@ test("compact record excludes detailed answers and selects reproducible fields",
     narrativeAttemptStatus: "pending",
     narrativeAttemptedAt: null,
     narrativeSelectionJson: null,
+    reportSnapshotKey: null,
+    reportPdfKey: null,
+    reportSnapshotHash: null,
+    reportPdfHash: null,
+    reportStorageStatus: null,
+    reportStoredAt: null,
     reportDeliveryStatus: "pending",
     internalNotificationStatus: "pending",
     internalNotificationClaimedAt: null,
@@ -213,6 +220,42 @@ test("compact record uses null contacts and no-delivery status without a lead", 
   assert.equal(record.reportDeliveryStatus, "not_requested");
 });
 
+test("report storage metadata starts nullable for new compact records", () => {
+  const record = toAssessmentRecord({
+    id: "assessment-report-storage",
+    lead,
+    result,
+  });
+
+  assert.deepEqual({
+    reportSnapshotKey: record.reportSnapshotKey,
+    reportPdfKey: record.reportPdfKey,
+    reportSnapshotHash: record.reportSnapshotHash,
+    reportPdfHash: record.reportPdfHash,
+    reportStorageStatus: record.reportStorageStatus,
+    reportStoredAt: record.reportStoredAt,
+  }, {
+    reportSnapshotKey: null,
+    reportPdfKey: null,
+    reportSnapshotHash: null,
+    reportPdfHash: null,
+    reportStorageStatus: null,
+    reportStoredAt: null,
+  });
+});
+
+test("generated migration adds nullable report storage metadata for existing records", async () => {
+  const migrationRoot = new URL("../../drizzle/", import.meta.url);
+  const files = (await readdir(migrationRoot)).filter((name) => name.endsWith(".sql"));
+  const migrations = await Promise.all(files.map((name) => readFile(new URL(name, migrationRoot), "utf8")));
+  const reportMigration = migrations.find((sql) => /ADD `report_snapshot_key` text/i.test(sql));
+
+  assert.ok(reportMigration, "expected a generated report storage metadata migration");
+  for (const column of ["report_snapshot_key", "report_pdf_key", "report_snapshot_hash", "report_pdf_hash", "report_storage_status", "report_stored_at"]) {
+    assert.match(reportMigration, new RegExp("ADD `" + column + "` text;", "i"));
+    assert.doesNotMatch(reportMigration, new RegExp(`${column}[^;]*NOT NULL`, "i"));
+  }
+});
 test("calculation handler persists the server-recomputed compact record", async () => {
   const persisted = [];
   const handler = createAssessmentCalculationHandler({
