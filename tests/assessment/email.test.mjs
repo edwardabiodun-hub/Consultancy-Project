@@ -264,6 +264,47 @@ test("a mocked successful Resend response updates reportDeliveryStatus to sent",
   assert.ok(requestBody.attachments[0].content.length > 0);
 });
 
+test("deliver route reuses the retained PDF attachment when present", async () => {
+  const storedPdf = new Uint8Array([37, 80, 68, 70, 45, 114, 101, 116, 97, 105, 110, 101, 100]);
+  let requestBody = null;
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({
+      ...baseDeliveryRecord,
+      reportPdfKey: `assessments/${assessmentId}/report.pdf`,
+      reportPdfHash: "expected-hash",
+    }),
+    loadStoredPdf: async () => ({ status: "found", bytes: storedPdf }),
+    markDelivered: async () => {},
+  });
+
+  await withEnv(
+    {
+      RESEND_API_KEY: "test-key",
+      ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com",
+    },
+    () =>
+      withMockedFetch(
+        async (_input, init) => {
+          requestBody = JSON.parse(String(init?.body));
+          return new Response(JSON.stringify({ id: "resend-message-id" }), {
+            status: 200,
+          });
+        },
+        async () => {
+          const response = await handler(deliverRequest(assessmentId), {
+            params: Promise.resolve({ id: assessmentId }),
+          });
+          assert.equal(response.status, 200);
+        },
+      ),
+  );
+
+  assert.equal(
+    requestBody.attachments[0].content,
+    Buffer.from(storedPdf).toString("base64"),
+  );
+});
+
 test("report consent is required for delivery", async () => {
   let fetchCalled = false;
   const handler = createAssessmentDeliverHandler({

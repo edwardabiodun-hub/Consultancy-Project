@@ -537,6 +537,70 @@ test("assessment report route privately downloads only selected persisted fields
   );
 });
 
+test("assessment report route serves the retained PDF when storage has a valid object", async () => {
+  const storedPdf = new Uint8Array([37, 80, 68, 70, 45, 115, 116, 111, 114, 101, 100]);
+  const handler = createAssessmentReportHandler({
+    findRecord: async () => ({
+      ...baseRecord,
+      reportPdfKey: `assessments/${assessmentId}/report.pdf`,
+      reportPdfHash: "expected-hash",
+    }),
+    loadStoredPdf: async (key, hash) => {
+      assert.equal(key, `assessments/${assessmentId}/report.pdf`);
+      assert.equal(hash, "expected-hash");
+      return { status: "found", bytes: storedPdf };
+    },
+  });
+
+  const response = await handler(
+    new Request(`https://example.com/api/assessment/${assessmentId}/report`),
+    { params: Promise.resolve({ id: assessmentId }) },
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), storedPdf);
+});
+
+test("assessment report route reconstructs the PDF when R2 is unavailable", async () => {
+  const handler = createAssessmentReportHandler({
+    findRecord: async () => ({
+      ...baseRecord,
+      reportPdfKey: `assessments/${assessmentId}/report.pdf`,
+      reportPdfHash: "expected-hash",
+    }),
+    loadStoredPdf: async () => ({ status: "unavailable" }),
+  });
+
+  const response = await handler(
+    new Request(`https://example.com/api/assessment/${assessmentId}/report`),
+    { params: Promise.resolve({ id: assessmentId }) },
+  );
+  const bytes = new Uint8Array(await response.arrayBuffer());
+
+  assert.equal(response.status, 200);
+  assert.equal(Buffer.from(bytes.subarray(0, 5)).toString("ascii"), "%PDF-");
+});
+
+test("assessment report route refuses a stored PDF whose hash does not match", async () => {
+  const handler = createAssessmentReportHandler({
+    findRecord: async () => ({
+      ...baseRecord,
+      reportPdfKey: `assessments/${assessmentId}/report.pdf`,
+      reportPdfHash: "expected-hash",
+    }),
+    loadStoredPdf: async () => ({ status: "hash_mismatch" }),
+  });
+
+  const response = await handler(
+    new Request(`https://example.com/api/assessment/${assessmentId}/report`),
+    { params: Promise.resolve({ id: assessmentId }) },
+  );
+
+  assert.equal(response.status, 503);
+  assert.match(await response.text(), /integrity check/i);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+});
+
 test("assessment report route returns a private 404 for invalid or unknown IDs", async () => {
   let lookupCount = 0;
   const handler = createAssessmentReportHandler({

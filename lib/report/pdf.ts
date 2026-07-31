@@ -8,6 +8,10 @@ import {
 } from "pdf-lib";
 import type { ComponentId } from "../assessment/types";
 
+import type { AssessmentResult } from "../assessment/result";
+import type { AssessmentLead } from "../assessment/validation";
+import type { NarrativeOutcome } from "../assessment/narrative";
+import { toAssessmentRecord } from "../assessment/record";
 export type AssessmentReportRecord = {
   id: string;
   assessmentVersion: string;
@@ -39,7 +43,30 @@ export type AssessmentReportRecord = {
   priorityIdsJson: string;
   leadRoute: string;
   narrativeSource: string;
+  reportPdfKey?: string | null;
+  reportPdfHash?: string | null;
 };
+
+export function createAssessmentReportRecord(input: {
+  id: string;
+  createdAt: string;
+  lead: AssessmentLead;
+  result: AssessmentResult;
+  role: string;
+  narrative: NarrativeOutcome;
+}): AssessmentReportRecord {
+  const compact = toAssessmentRecord({
+    id: input.id,
+    lead: input.lead,
+    result: input.result,
+    role: input.role,
+  });
+  return {
+    ...compact,
+    createdAt: input.createdAt,
+    narrativeSource: input.narrative.source,
+  };
+}
 
 const PAGE = { width: 612, height: 792, margin: 54 };
 const CONTENT_FLOOR = 58;

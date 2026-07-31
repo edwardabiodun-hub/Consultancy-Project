@@ -17,6 +17,13 @@ import {
   sendInternalAssessmentEmail,
 } from "../../../../../lib/email/internal-assessment";
 
+import { createAssessmentReportRecord } from "../../../../../lib/report/pdf";
+import {
+  createReportStorage,
+  persistFullReportSnapshot as persistReportSnapshot,
+  type PersistFullReportSnapshotInput,
+  type ReportStorageMetadata,
+} from "../../../../../lib/report/storage";
 type AssessmentRecord = typeof assessmentRecords.$inferSelect;
 type RouteContext = { params: Promise<{ id: string }> };
 type NotificationClaim = "claimed" | "sent" | "busy";
@@ -45,6 +52,9 @@ type HandlerDependencies = {
   claimInternalNotification: (id: string, payloadHash: string) => Promise<NotificationClaim>;
   finalizeInternalNotification: (id: string, outcome: NotificationOutcome) => Promise<void>;
   sendInternalNotification: typeof sendInternalAssessmentEmail;
+  persistFullReportSnapshot: (
+    input: PersistFullReportSnapshotInput,
+  ) => Promise<unknown>;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -62,6 +72,39 @@ const findAssessmentRecord = async (id: string): Promise<AssessmentRecord | null
   ]);
   const [record] = await getDb().select().from(assessmentRecords).where(eq(assessmentRecords.id, id)).limit(1);
   return record ?? null;
+};
+
+type ReportsBucket = {
+  put(key: string, value: string | Uint8Array): Promise<unknown>;
+  delete(keys: string[]): Promise<unknown>;
+};
+
+const persistStoredFullReportSnapshot = async (
+  input: PersistFullReportSnapshotInput,
+): Promise<void> => {
+  const [{ getDb }, { assessmentRecords }, { env }] = await Promise.all([
+    import("../../../../../db"),
+    import("../../../../../db/schema"),
+    import("cloudflare:workers"),
+  ]);
+  const updateMetadata = async (metadata: ReportStorageMetadata) => {
+    await getDb()
+      .update(assessmentRecords)
+      .set(metadata)
+      .where(eq(assessmentRecords.id, input.assessmentId));
+  };
+  const bucket = (env as unknown as { REPORTS?: ReportsBucket }).REPORTS;
+  if (!bucket) {
+    await updateMetadata({
+      reportStorageStatus: "storage_failed",
+      reportStoredAt: null,
+    });
+    throw new Error("REPORTS binding unavailable");
+  }
+  await persistReportSnapshot(input, {
+    reportStorage: createReportStorage(bucket),
+    updateMetadata,
+  });
 };
 
 const limiterBinding = async (name: "NARRATIVE_RATE_LIMITER" | "NARRATIVE_GLOBAL_RATE_LIMITER") => {
@@ -275,6 +318,8 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
   const claimInternalNotification = dependencies.claimInternalNotification ?? claimStoredInternalNotification;
   const finalizeInternalNotification = dependencies.finalizeInternalNotification ?? finalizeStoredInternalNotification;
   const sendInternalNotification = dependencies.sendInternalNotification ?? sendInternalAssessmentEmail;
+  const persistFullReportSnapshot = dependencies.persistFullReportSnapshot
+    ?? persistStoredFullReportSnapshot;
 
   return async function postAssessmentNarrative(request: Request, context: RouteContext) {
     const { id } = await context.params;
@@ -410,6 +455,36 @@ export function createAssessmentNarrativeHandler(dependencies: Partial<HandlerDe
       source: narrativeState.source,
       text: narrativeState.text,
     };
+    if (
+      definitiveOutcome
+      && persistenceAvailable
+      && parsed.lead?.reportConsent === true
+      && record.reportStorageStatus !== "stored"
+    ) {
+      const reportRecord = createAssessmentReportRecord({
+        id,
+        createdAt: record.createdAt,
+        lead: parsed.lead,
+        result,
+        role: parsed.answers.role,
+        narrative,
+      });
+      try {
+        await persistFullReportSnapshot({
+          assessmentId: id,
+          assessmentVersion: result.methodologyVersion,
+          createdAt: record.createdAt,
+          lead: parsed.lead,
+          answers: parsed.answers,
+          result,
+          narrative,
+          reportRecord,
+        });
+      } catch {
+        // D1 retains storage_failed; compact report reconstruction and the
+        // accepted on-screen result remain available.
+      }
+    }
     let internalNotificationAccepted = false;
     if (definitiveOutcome && persistenceAvailable && parsed.lead) {
       const notificationInput: NotificationInput = {

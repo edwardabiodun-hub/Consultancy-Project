@@ -1,12 +1,18 @@
+import type { AssessmentAnswers } from "../assessment/types";
+import type { AssessmentResult } from "../assessment/result";
+import type { AssessmentLead } from "../assessment/validation";
+import type { NarrativeOutcome } from "../assessment/narrative";
+import { buildAssessmentPdf, type AssessmentReportRecord } from "./pdf";
+
 export type ReportSnapshot = {
   schemaVersion: number;
   assessmentId: string;
   assessmentVersion: string;
   createdAt: string;
-  lead: Record<string, unknown>;
-  answers: Record<string, unknown>;
-  result: Record<string, unknown>;
-  narrative: Record<string, unknown>;
+  lead: object;
+  answers: object;
+  result: object;
+  narrative: object;
   pdfObjectKey: string;
 };
 
@@ -29,6 +35,43 @@ export type ReportStorage = {
 type ReportBucket = {
   put(key: string, value: string | Uint8Array): Promise<unknown>;
   delete(keys: string[]): Promise<unknown>;
+};
+
+export type ReportStorageMetadata = {
+  reportSnapshotKey?: string;
+  reportPdfKey?: string;
+  reportSnapshotHash?: string;
+  reportPdfHash?: string;
+  reportStorageStatus: "stored" | "storage_failed";
+  reportStoredAt: string | null;
+};
+
+export type PersistFullReportSnapshotInput = {
+  assessmentId: string;
+  assessmentVersion: string;
+  createdAt: string;
+  lead: AssessmentLead;
+  answers: AssessmentAnswers;
+  result: AssessmentResult;
+  narrative: NarrativeOutcome;
+  reportRecord: AssessmentReportRecord;
+};
+
+type PersistFullReportSnapshotDependencies = {
+  reportStorage: ReportStorage;
+  buildPdf?: typeof buildAssessmentPdf;
+  updateMetadata: (metadata: ReportStorageMetadata) => Promise<void>;
+  now?: () => Date;
+};
+
+export type StoredPdfLoadResult =
+  | { status: "found"; bytes: Uint8Array }
+  | { status: "missing" | "unavailable" | "hash_mismatch" };
+
+export type ReportReadBucket = {
+  get(key: string): Promise<{
+    arrayBuffer(): Promise<ArrayBuffer>;
+  } | null>;
 };
 
 const encoder = new TextEncoder();
@@ -119,4 +162,79 @@ export function createReportStorage(bucket: ReportBucket): ReportStorage {
       await bucket.delete([keys.snapshotKey, keys.pdfKey]);
     },
   };
+}
+
+export async function readStoredReportPdf(
+  bucket: ReportReadBucket,
+  objectKey: string,
+  expectedHash: string,
+): Promise<StoredPdfLoadResult> {
+  assertPdfObjectKey(objectKey);
+  let object: Awaited<ReturnType<ReportReadBucket["get"]>>;
+  try {
+    object = await bucket.get(objectKey);
+  } catch {
+    return { status: "unavailable" };
+  }
+  if (!object) return { status: "missing" };
+
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await object.arrayBuffer());
+  } catch {
+    return { status: "unavailable" };
+  }
+  return (await sha256(bytes)) === expectedHash
+    ? { status: "found", bytes }
+    : { status: "hash_mismatch" };
+}
+
+export async function persistFullReportSnapshot(
+  input: PersistFullReportSnapshotInput,
+  dependencies: PersistFullReportSnapshotDependencies,
+): Promise<ReportStorageMetadata> {
+  const keys = createReportObjectKeys(input.assessmentId);
+  const snapshot: ReportSnapshot = {
+    schemaVersion: 1,
+    assessmentId: input.assessmentId,
+    assessmentVersion: input.assessmentVersion,
+    createdAt: input.createdAt,
+    lead: input.lead,
+    answers: input.answers,
+    result: input.result,
+    narrative: input.narrative,
+    pdfObjectKey: keys.pdfKey,
+  };
+  const buildPdf = dependencies.buildPdf ?? buildAssessmentPdf;
+
+  try {
+    const pdfBytes = await buildPdf(input.reportRecord);
+    const pdf = await dependencies.reportStorage.putPdf(keys.pdfKey, pdfBytes);
+    const storedSnapshot = await dependencies.reportStorage.putSnapshot(snapshot);
+    const metadata: ReportStorageMetadata = {
+      reportSnapshotKey: storedSnapshot.snapshotKey,
+      reportPdfKey: pdf.pdfKey,
+      reportSnapshotHash: storedSnapshot.snapshotHash,
+      reportPdfHash: pdf.pdfHash,
+      reportStorageStatus: "stored",
+      reportStoredAt: (dependencies.now ?? (() => new Date()))().toISOString(),
+    };
+    await dependencies.updateMetadata(metadata);
+    return metadata;
+  } catch (error) {
+    try {
+      await dependencies.reportStorage.deleteReportObjects(keys);
+    } catch {
+      // Best-effort cleanup: storage_failed remains authoritative in D1.
+    }
+    try {
+      await dependencies.updateMetadata({
+        reportStorageStatus: "storage_failed",
+        reportStoredAt: null,
+      });
+    } catch {
+      // Preserve the original storage failure for the caller.
+    }
+    throw error;
+  }
 }

@@ -83,3 +83,107 @@ test("deleting report objects is idempotent", async () => {
 test("canonical serialization orders object keys by Unicode code unit", () => {
   assert.equal(canonicalJson({ a: 1, B: 2 }), '{"B":2,"a":1}');
 });
+
+test("stored PDF retrieval validates the retained SHA-256 hash", async () => {
+  const reportStorageModule = await import("../../lib/report/storage.ts");
+  assert.equal(typeof reportStorageModule.readStoredReportPdf, "function");
+  const bucket = {
+    get: async () => ({
+      arrayBuffer: async () => Uint8Array.from([37, 80, 68, 70]).buffer,
+    }),
+  };
+
+  assert.deepEqual(
+    await reportStorageModule.readStoredReportPdf(
+      bucket,
+      `assessments/${assessmentId}/report.pdf`,
+      "not-the-real-hash",
+    ),
+    { status: "hash_mismatch" },
+  );
+});
+
+test("full report persistence stores one PDF, a complete snapshot, and D1 hashes", async () => {
+  const reportStorageModule = await import("../../lib/report/storage.ts");
+  assert.equal(typeof reportStorageModule.persistFullReportSnapshot, "function");
+  const calls = { snapshots: [], pdfs: [], metadata: [], builds: 0 };
+  const reportStorage = {
+    putSnapshot: async (value) => {
+      calls.snapshots.push(value);
+      return { snapshotKey: `assessments/${assessmentId}/snapshot.json`, snapshotHash: "snapshot-hash" };
+    },
+    putPdf: async (key, bytes) => {
+      calls.pdfs.push({ key, bytes });
+      return { pdfKey: key, pdfHash: "pdf-hash" };
+    },
+    deleteReportObjects: async () => {},
+  };
+  const input = {
+    assessmentId,
+    assessmentVersion: "1.0.0",
+    createdAt: "2026-07-30T12:00:00.000Z",
+    lead: { name: "Eddie", reportConsent: true },
+    answers: { role: "Owner-operator" },
+    result: { score: { overall: 72 } },
+    narrative: { source: "ai", text: "Accepted closed-set narrative" },
+    reportRecord: { id: assessmentId },
+  };
+
+  await reportStorageModule.persistFullReportSnapshot(input, {
+    reportStorage,
+    buildPdf: async () => {
+      calls.builds += 1;
+      return new Uint8Array([37, 80, 68, 70]);
+    },
+    updateMetadata: async (metadata) => calls.metadata.push(metadata),
+    now: () => new Date("2026-07-30T12:01:00.000Z"),
+  });
+
+  assert.equal(calls.builds, 1);
+  assert.deepEqual(calls.snapshots, [{
+    schemaVersion: 1,
+    assessmentId,
+    assessmentVersion: "1.0.0",
+    createdAt: "2026-07-30T12:00:00.000Z",
+    lead: input.lead,
+    answers: input.answers,
+    result: input.result,
+    narrative: input.narrative,
+    pdfObjectKey: `assessments/${assessmentId}/report.pdf`,
+  }]);
+  assert.equal(calls.pdfs.length, 1);
+  assert.equal(calls.pdfs[0].key, `assessments/${assessmentId}/report.pdf`);
+  assert.deepEqual(calls.metadata, [{
+    reportSnapshotKey: `assessments/${assessmentId}/snapshot.json`,
+    reportPdfKey: `assessments/${assessmentId}/report.pdf`,
+    reportSnapshotHash: "snapshot-hash",
+    reportPdfHash: "pdf-hash",
+    reportStorageStatus: "stored",
+    reportStoredAt: "2026-07-30T12:01:00.000Z",
+  }]);
+});
+
+test("full report persistence records storage_failed after an object write fails", async () => {
+  const reportStorageModule = await import("../../lib/report/storage.ts");
+  const metadata = [];
+  const reportStorage = {
+    putSnapshot: async () => { throw new Error("R2 unavailable"); },
+    putPdf: async (key) => ({ pdfKey: key, pdfHash: "pdf-hash" }),
+    deleteReportObjects: async () => {},
+  };
+
+  await assert.rejects(
+    () => reportStorageModule.persistFullReportSnapshot({
+      assessmentId,
+      assessmentVersion: "1.0.0",
+      createdAt: "2026-07-30T12:00:00.000Z",
+      lead: {}, answers: {}, result: {}, narrative: {}, reportRecord: {},
+    }, {
+      reportStorage,
+      buildPdf: async () => new Uint8Array([37, 80, 68, 70]),
+      updateMetadata: async (value) => metadata.push(value),
+    }),
+    /R2 unavailable/,
+  );
+  assert.deepEqual(metadata, [{ reportStorageStatus: "storage_failed", reportStoredAt: null }]);
+});

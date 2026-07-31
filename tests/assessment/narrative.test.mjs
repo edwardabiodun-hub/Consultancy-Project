@@ -178,6 +178,82 @@ test("narrative route persists the accepted narrative source against the given i
   assert.equal(updatedSource, "ai");
 });
 
+test("narrative route persists a complete AI snapshot from validated server inputs", async () => {
+  let persistenceInput = null;
+  const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
+    generateNarrative: async () => routeAiNarrative,
+    updateNarrativeSource: async () => {},
+    persistFullReportSnapshot: async (input) => {
+      persistenceInput = input;
+    },
+  });
+
+  const response = await handler(
+    narrativeRequest(assessmentId, {
+      ...validPayload,
+      result: { score: { overall: 999 } },
+    }),
+    { params: Promise.resolve({ id: assessmentId }) },
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(persistenceInput.assessmentId, assessmentId);
+  assert.equal(persistenceInput.assessmentVersion, routeResult.methodologyVersion);
+  assert.equal(persistenceInput.createdAt, routeRecord.createdAt);
+  assert.deepEqual(persistenceInput.lead, validPayload.lead);
+  assert.deepEqual(persistenceInput.answers, validPayload.answers);
+  assert.equal(persistenceInput.result.score.overall, 50);
+  assert.deepEqual(persistenceInput.narrative, publicRouteAiNarrative);
+  assert.equal(persistenceInput.reportRecord.narrativeSource, "ai");
+});
+
+test("narrative route persists the accepted rules fallback snapshot", async () => {
+  let persistenceInput = null;
+  const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
+    checkGlobalRateLimit: async () => false,
+    generateNarrative: async () => {
+      throw new Error("OpenAI must not run after limiter rejection");
+    },
+    updateNarrativeSource: async () => {},
+    persistFullReportSnapshot: async (input) => {
+      persistenceInput = input;
+    },
+  });
+
+  const response = await handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(persistenceInput.narrative, {
+    source: "rules",
+    text: routeResult.narrative.summary,
+  });
+  assert.equal(persistenceInput.reportRecord.narrativeSource, "rules");
+});
+
+test("snapshot storage failure does not block the accepted on-screen narrative", async () => {
+  const handler = createAssessmentNarrativeHandler({
+    ...routeTestDependencies,
+    generateNarrative: async () => routeAiNarrative,
+    updateNarrativeSource: async () => {},
+    persistFullReportSnapshot: async () => {
+      throw new Error("REPORTS unavailable");
+    },
+  });
+
+  const response = await handler(narrativeRequest(assessmentId, validPayload), {
+    params: Promise.resolve({ id: assessmentId }),
+  });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.narrative, publicRouteAiNarrative);
+  assert.equal(body.persistenceAvailable, true);
+});
+
 test("narrative route reports persistenceAvailable=false without failing the request when the D1 update throws", async () => {
   const handler = createAssessmentNarrativeHandler({
     ...routeTestDependencies,

@@ -7,6 +7,11 @@ import {
 } from "../../../../../lib/report/pdf";
 import { assessmentReportColumns } from "../../../../../lib/assessment/query";
 
+import {
+  readStoredReportPdf,
+  type ReportReadBucket,
+  type StoredPdfLoadResult,
+} from "../../../../../lib/report/storage";
 export type AssessmentDeliveryRecord = AssessmentReportRecord & {
   workEmail: string | null;
   reportConsent: boolean;
@@ -17,6 +22,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 type HandlerDependencies = {
   findRecord: (id: string) => Promise<AssessmentDeliveryRecord | null>;
   markDelivered: (id: string) => Promise<void>;
+  loadStoredPdf: (key: string, hash: string) => Promise<StoredPdfLoadResult>;
 };
 
 const UUID =
@@ -74,6 +80,20 @@ const findAssessmentDeliveryRecord = async (
   return record ?? null;
 };
 
+const loadStoredAssessmentPdf = async (
+  key: string,
+  hash: string,
+): Promise<StoredPdfLoadResult> => {
+  try {
+    const { env } = await import("cloudflare:workers");
+    const bucket = (env as unknown as { REPORTS?: ReportReadBucket }).REPORTS;
+    if (!bucket) return { status: "unavailable" };
+    return await readStoredReportPdf(bucket, key, hash);
+  } catch {
+    return { status: "unavailable" };
+  }
+};
+
 const markAssessmentDelivered = async (id: string) => {
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"),
@@ -100,6 +120,7 @@ export function createAssessmentDeliverHandler(
 ) {
   const findRecord = dependencies.findRecord ?? findAssessmentDeliveryRecord;
   const markDelivered = dependencies.markDelivered ?? markAssessmentDelivered;
+  const loadStoredPdf = dependencies.loadStoredPdf ?? loadStoredAssessmentPdf;
 
   return async function postAssessmentDeliver(
     _request: Request,
@@ -134,10 +155,19 @@ export function createAssessmentDeliverHandler(
       );
     }
 
-    const [pdfBytes, email] = await Promise.all([
-      buildAssessmentPdf(record),
-      Promise.resolve(buildAssessmentEmail(record)),
-    ]);
+    let pdfBytes: Uint8Array | null = null;
+    if (record.reportPdfKey && record.reportPdfHash) {
+      let stored: StoredPdfLoadResult = { status: "unavailable" };
+      try {
+        stored = await loadStoredPdf(record.reportPdfKey, record.reportPdfHash);
+      } catch {
+        // Preserve compact reconstruction when R2 itself is unavailable.
+      }
+      if (stored.status === "hash_mismatch") return deliveryUnavailable();
+      if (stored.status === "found") pdfBytes = stored.bytes;
+    }
+    pdfBytes ??= await buildAssessmentPdf(record);
+    const email = buildAssessmentEmail(record);
 
     const sent = await fetch("https://api.resend.com/emails", {
       method: "POST",

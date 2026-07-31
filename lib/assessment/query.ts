@@ -45,4 +45,6 @@ export const assessmentReportColumns = (table: AssessmentRecordsTable) => ({
   priorityIdsJson: table.priorityIdsJson,
   leadRoute: table.leadRoute,
   narrativeSource: table.narrativeSource,
+  reportPdfKey: table.reportPdfKey,
+  reportPdfHash: table.reportPdfHash,
 });
