@@ -223,6 +223,22 @@ test("renders a guided illustrative assessment result without requiring submissi
   );
 });
 
+
+test("insight Explore links render the provided article and guide drafts", async () => {
+  const executiveResponse = await request("/founder-resources/executive-reports-that-drive-action");
+  assert.equal(executiveResponse.status, 200);
+  const executiveHtml = await executiveResponse.text();
+  assert.match(executiveHtml, /The executive reporting trap/i);
+  assert.match(executiveHtml, /Last-Minute Assembly Tax/i);
+  assert.match(executiveHtml, /Build an automated truth engine/i);
+
+  const automationResponse = await request("/founder-resources/automation-before-ai");
+  assert.equal(automationResponse.status, 200);
+  const automationHtml = await automationResponse.text();
+  assert.match(automationHtml, /The automation trap/i);
+  assert.match(automationHtml, /The pre-automation blueprint/i);
+  assert.match(automationHtml, /Technology scales process quality/i);
+});
 test("assessment and paid diagnostic remain separate, non-overlapping routes", async () => {
   const [diagnosticHtml, assessmentHtml] = await Promise.all([
     request("/diagnostic").then((response) => response.text()),
@@ -953,3 +969,4 @@ test("assessment responses never reflect submitted lead PII", async (t) => {
     });
   }
 });
+

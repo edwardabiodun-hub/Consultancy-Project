@@ -1,0 +1,92 @@
+export type ResourceBlock =
+  | { kind: "paragraph"; text: string }
+  | { kind: "heading"; text: string }
+  | { kind: "quote"; text: string }
+  | { kind: "list"; items: string[] }
+  | { kind: "callout"; text: string };
+
+export const resourceArticles: Record<string, {
+  deck: string;
+  readingTime: string;
+  blocks: ResourceBlock[];
+}> = {
+  "executive-reports-that-drive-action": {
+    deck: "Separate useful operating signals from management noise. Redesign reporting around the decisions it should drive, not the history it explains.",
+    readingTime: "6 minutes",
+    blocks: [
+      { kind: "paragraph", text: "Most leadership teams do not have a reporting problem. They have a decision problem." },
+      { kind: "paragraph", text: "Every month, executives invest hours gathering reports from CRM systems, accounting software, spreadsheets, project management tools, and email threads. The information eventually lands in a board deck or management report that explains what happened last month." },
+      { kind: "paragraph", text: "The problem is that by the time the report is complete, the decisions that could have changed the outcome have already passed. Reporting should reduce uncertainty, not create another administrative task." },
+      { kind: "quote", text: "Does your reporting help you run the business, or merely describe it?" },
+      { kind: "heading", text: "The executive reporting trap" },
+      { kind: "paragraph", text: "Most organizations unknowingly pay what RunRate calls the Last-Minute Assembly Tax. Someone exports CRM data. Finance updates spreadsheets. Operations sends production numbers. Sales managers revise forecasts. Leadership waits while someone reconciles conflicting figures." },
+      { kind: "paragraph", text: "By the time everything is assembled, several hours or even days have been consumed simply trying to answer a basic question: what is actually happening in the business?" },
+      { kind: "callout", text: "If executives must manually assemble the truth every reporting cycle, the reporting system itself has become operational work." },
+      { kind: "heading", text: "Rearview mirror management" },
+      { kind: "paragraph", text: "Traditional executive reports are designed to explain the past: revenue versus budget, gross margin versus prior year, operating expenses, pipeline summaries, utilization, and customer satisfaction. These metrics are useful, but by themselves they rarely improve performance." },
+      { kind: "list", items: ["What happened?", "How did we perform?", "Where did we miss target?"] },
+      { kind: "paragraph", text: "Leadership teams also need reports that answer different questions." },
+      { kind: "list", items: ["What is changing?", "Where is risk increasing?", "Which decision requires attention this week?", "What should we do next?"] },
+      { kind: "heading", text: "Signal versus noise" },
+      { kind: "paragraph", text: "A common misconception is that better reporting means more metrics. In reality, more metrics usually create more interpretation. When every dashboard contains dozens of charts, executives spend meetings debating numbers rather than making decisions." },
+      { kind: "callout", text: "Every executive metric should either trigger a decision, confirm a strategic assumption, or highlight emerging risk." },
+      { kind: "heading", text: "Redesign reporting around decisions" },
+      { kind: "paragraph", text: "The most effective leadership teams reverse the traditional reporting model. Instead of starting with available data, they start with recurring executive decisions." },
+      { kind: "list", items: ["Should we hire additional capacity?", "Is revenue at risk this quarter?", "Which customers require executive attention?", "Are delivery commitments achievable?", "Where should investment be prioritized?"] },
+      { kind: "heading", text: "Identify your operating signals" },
+      { kind: "paragraph", text: "Every business has a small number of indicators that influence overall performance. These are not vanity metrics. They are operating signals: qualified pipeline coverage, weekly conversion, capacity utilization, backlog health, cash collection, customer delays, open risks, and forecast confidence." },
+      { kind: "paragraph", text: "The exact signals vary by industry, but the principle stays the same. Executives should monitor the few indicators that provide early visibility into future outcomes, not the ones that simply confirm historical results." },
+      { kind: "heading", text: "Define intervention thresholds" },
+      { kind: "paragraph", text: "Information becomes actionable only when leaders know what requires intervention. Each operating signal should include predefined thresholds: green for healthy, amber for review, and red for executive action." },
+      { kind: "paragraph", text: "Without thresholds, dashboards simply report variation. With thresholds, they guide attention." },
+      { kind: "heading", text: "Build an automated truth engine" },
+      { kind: "paragraph", text: "Decision-driven reporting depends on one source of operational truth. Most organizations already have the information they need. The challenge is that it lives across disconnected systems, including CRM, accounting, project management, operations tools, and spreadsheets." },
+      { kind: "list", items: ["Integrate core systems.", "Standardize definitions.", "Eliminate duplicate data entry.", "Automate recurring calculations.", "Present information visually."] },
+      { kind: "heading", text: "A practical framework for leadership" },
+      { kind: "list", items: ["Audit every recurring report, preparation time, manual effort, source system, and duplicated metric.", "Map recurring executive decisions to the smallest set of leading indicators needed to support them.", "Automate recurring data movement, KPI updates, exception monitoring, and executive summaries.", "Adopt exception-based management so meetings focus on risks, deviations, decisions, and corrective action."] },
+      { kind: "heading", text: "Where to begin" },
+      { kind: "paragraph", text: "If your executive team still spends hours collecting, reconciling, and validating information before every management meeting, the reporting process itself deserves attention." },
+      { kind: "list", items: ["Identify the manual effort hidden inside your reporting cycle.", "Clarify which operating signals truly drive executive decisions.", "Automate repetitive data movement.", "Design dashboards around exceptions rather than historical explanation."] },
+    ],
+  },
+  "automation-before-ai": {
+    deck: "Do not automate a process you do not understand. Automation magnifies unclear ownership and process variation.",
+    readingTime: "7 minutes",
+    blocks: [
+      { kind: "paragraph", text: "Businesses have never had more access to automation and artificial intelligence. Every week, a new platform promises to eliminate repetitive work, increase productivity, or transform operations with AI-powered workflows." },
+      { kind: "paragraph", text: "For business owners under pressure to do more with less, the temptation is understandable: buy the software, connect a few systems, and expect efficiency to follow. Unfortunately, that is not how operational excellence gets built." },
+      { kind: "quote", text: "Automation does not fix broken processes. It amplifies them." },
+      { kind: "paragraph", text: "If ownership is unclear, automation accelerates confusion. If people perform the same task three different ways, automation scales inconsistency. If employees rely on spreadsheets, email chains, and undocumented workarounds to get work done, automation makes those workarounds faster." },
+      { kind: "heading", text: "The automation trap" },
+      { kind: "paragraph", text: "Technology is very good at executing defined, repeatable work. What it cannot do is compensate for poor operating design." },
+      { kind: "paragraph", text: "Many organizations follow the wrong sequence: current process, buy software, automate. The stronger sequence is current process, clarify, simplify, standardize, automate." },
+      { kind: "callout", text: "Technology scales process quality. If the process is poor, the outcome becomes poor at greater speed." },
+      { kind: "heading", text: "Where operational friction really comes from" },
+      { kind: "paragraph", text: "Organizations often attribute delays to people. More often, the problem is the system surrounding those people. Three patterns show up repeatedly." },
+      { kind: "heading", text: "1. Unclear ownership" },
+      { kind: "paragraph", text: "Many workflows have participants but very few true owners. When ownership is ambiguous, approvals wait unnecessarily, decisions escalate by default, accountability becomes difficult, and work stalls between departments." },
+      { kind: "paragraph", text: "Ask one simple question: who owns this process from beginning to end? If the answer requires three minutes of discussion, ownership is already unclear." },
+      { kind: "heading", text: "2. Process variation" },
+      { kind: "paragraph", text: "Ask three employees how they complete the same recurring task. Many businesses get three different answers because each employee has developed a version that works." },
+      { kind: "paragraph", text: "Over time, those differences create inconsistent customer experiences, reporting discrepancies, training challenges, quality variation, and automation failures." },
+      { kind: "heading", text: "3. Shadow systems" },
+      { kind: "paragraph", text: "One of the strongest signs of operational friction is the existence of unofficial systems: personal spreadsheets, handwritten notes, private task lists, email reminders, duplicated data entry, and unofficial approval trackers." },
+      { kind: "paragraph", text: "Employees rarely build shadow systems because they enjoy extra work. They build them because the official process no longer supports reality." },
+      { kind: "heading", text: "The pre-automation blueprint" },
+      { kind: "paragraph", text: "Businesses that implement automation successfully tend to follow a disciplined approach before selecting technology." },
+      { kind: "list", items: ["Map the process exactly as it operates today, not how leadership believes it operates.", "Challenge every activity before automating it.", "Establish one accountable owner, supporting contributors, escalation triggers, approval limits, and success measures."] },
+      { kind: "callout", text: "You cannot improve what you cannot clearly describe." },
+      { kind: "heading", text: "Applying practical AI and automation" },
+      { kind: "paragraph", text: "Once workflows have been clarified and standardized, AI becomes a force multiplier. The question shifts from where can we use AI to which work should AI perform." },
+      { kind: "paragraph", text: "The highest-value automation candidates are repetitive, rules-based, high volume, consistent, measurable, and low judgment." },
+      { kind: "list", items: ["Recurring reporting", "Data reconciliation", "Document routing", "Notification workflows", "Information retrieval", "Routine approvals within defined thresholds"] },
+      { kind: "paragraph", text: "The objective is not replacing people. It is removing repetitive work so people spend more time applying judgment where it matters." },
+      { kind: "heading", text: "Choose workflows before choosing tools" },
+      { kind: "paragraph", text: "One of the most common implementation mistakes is selecting software first. Organizations get excited by platform demonstrations and then try to reshape operations around the application." },
+      { kind: "paragraph", text: "Begin with the workflow. Understand the required outcome, which information must move, where decisions occur, who owns each stage, and which integrations are actually necessary." },
+      { kind: "heading", text: "Where to begin" },
+      { kind: "paragraph", text: "If your organization is evaluating AI, workflow automation, or process improvement, resist the urge to start with technology. Start by understanding how work actually gets done." },
+      { kind: "list", items: ["Map your workflows.", "Clarify ownership.", "Reduce unnecessary complexity.", "Then automate what remains."] },
+    ],
+  },
+};

@@ -11,6 +11,7 @@ const visitorFacingFiles = [
   "app/assessment/AssessmentFlow.tsx",
   "app/assessment/BandedCapacityInputs.tsx",
   "app/api/contact/route.ts",
+  "content/resource-articles.ts",
   "content/resources.ts",
 ];
 
@@ -29,3 +30,4 @@ test("visitor-facing copy avoids em dashes and obvious AI-style wording", async 
     }
   }
 });
+
