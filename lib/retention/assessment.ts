@@ -14,6 +14,7 @@ type ExpiredRecord = {
   report_snapshot_key?: string | null;
   report_pdf_key?: string | null;
 };
+const MAX_RETAINED_FAILURE_IDS = 100;
 const sqliteTimestamp = (date: Date): string =>
   date.toISOString().slice(0, 19).replace("T", " ");
 const preDeleteCount = (result: D1Result | undefined): number =>
@@ -34,7 +35,9 @@ export async function runAssessmentRetentionCleanup(
   reportObjectsFailed?: number;
   status?: "completed" | "partial";
 }> {
-  const reports = isReportsBucket(reportsOrOptions) ? reportsOrOptions : undefined;
+  const reports = isReportsBucket(reportsOrOptions)
+    ? reportsOrOptions
+    : undefined;
   const options = reports ? suppliedOptions : reportsOrOptions;
   const now = options.now ?? new Date();
   const cutoff = sqliteTimestamp(
@@ -43,6 +46,7 @@ export async function runAssessmentRetentionCleanup(
   const id = (options.createId ?? (() => crypto.randomUUID()))();
   let reportObjectsDeleted = 0;
   let reportObjectsFailed = 0;
+  let skipD1Cleanup = false;
   const failedRecordIds: string[] = [];
   if (reports) {
     const expiredRecords = await db.batch([
@@ -65,8 +69,38 @@ export async function runAssessmentRetentionCleanup(
           failed = true;
         }
       }
-      if (failed) failedRecordIds.push(record.id);
+      if (failed && failedRecordIds.length < MAX_RETAINED_FAILURE_IDS) {
+        failedRecordIds.push(record.id);
+      } else if (failed) {
+        skipD1Cleanup = true;
+      }
     }
+  }
+  if (skipD1Cleanup) {
+    const status = "partial" as const;
+    await db.batch([
+      db
+        .prepare(
+          "INSERT INTO retention_cleanup_runs (id, cutoff_at, assessment_records_deleted, assessment_events_deleted, report_objects_deleted, report_objects_failed, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(
+          id,
+          cutoff,
+          0,
+          0,
+          reportObjectsDeleted,
+          reportObjectsFailed,
+          status,
+        ),
+    ]);
+    return {
+      cutoff,
+      assessmentEventsDeleted: 0,
+      assessmentRecordsDeleted: 0,
+      reportObjectsDeleted,
+      reportObjectsFailed,
+      status,
+    };
   }
   const retainedRecordClause = failedRecordIds.length
     ? ` AND id NOT IN (${failedRecordIds.map(() => "?").join(", ")})`

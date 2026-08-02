@@ -14,3 +14,10 @@
 - `npm run build` ? passing.
 
 ## Operational note
+
+## Review-fix verification
+
+- Drizzle-generated migration metadata is committed: `0009_slimy_sabretooth.sql`, `meta/0009_snapshot.json`, and the journal entry.
+- A second `npm run db:generate` returned `No schema changes, nothing to migrate`, proving no duplicate migration drift.
+- Broad R2 outages cap retained failure IDs at 100. Once exceeded, cleanup writes a `partial` audit with zero D1 deletions, avoiding SQLite bind-limit exposure while retaining all records for retry.
+- Focused retention coverage now verifies this broad-outage behavior and audit status/counts.

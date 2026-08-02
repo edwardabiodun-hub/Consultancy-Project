@@ -1,2 +1,0 @@
-ALTER TABLE `retention_cleanup_runs` ADD `report_objects_deleted` integer DEFAULT 0 NOT NULL;
-ALTER TABLE `retention_cleanup_runs` ADD `report_objects_failed` integer DEFAULT 0 NOT NULL;
