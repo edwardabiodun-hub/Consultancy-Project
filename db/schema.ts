@@ -1,15 +1,12 @@
 import { sql } from "drizzle-orm";
-import {
-  integer,
-  real,
-  sqliteTable,
-  text,
-} from "drizzle-orm/sqlite-core";
+import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const assessmentRecords = sqliteTable("assessment_records", {
   id: text("id").primaryKey(),
   assessmentVersion: text("assessment_version").notNull(),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
   name: text("name"),
   workEmail: text("work_email"),
   company: text("company"),
@@ -67,7 +64,9 @@ export const assessmentRecords = sqliteTable("assessment_records", {
     .notNull()
     .default("pending"),
   internalNotificationClaimedAt: text("internal_notification_claimed_at"),
-  internalNotificationFirstAttemptAt: text("internal_notification_first_attempt_at"),
+  internalNotificationFirstAttemptAt: text(
+    "internal_notification_first_attempt_at",
+  ),
   internalNotificationSentAt: text("internal_notification_sent_at"),
   internalNotificationPayloadHash: text("internal_notification_payload_hash"),
 });
@@ -85,14 +84,20 @@ export const assessmentEvents = sqliteTable("assessment_events", {
   scoreConfidence: text("score_confidence"),
   impactConfidence: text("impact_confidence"),
   route: text("route"),
-  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
 });
 
 export const retentionCleanupRuns = sqliteTable("retention_cleanup_runs", {
   id: text("id").primaryKey(),
-  runAt: text("run_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  runAt: text("run_at")
+    .notNull()
+    .default(sql`CURRENT_TIMESTAMP`),
   cutoffAt: text("cutoff_at").notNull(),
   assessmentRecordsDeleted: integer("assessment_records_deleted").notNull(),
   assessmentEventsDeleted: integer("assessment_events_deleted").notNull(),
+  reportObjectsDeleted: integer("report_objects_deleted").notNull().default(0),
+  reportObjectsFailed: integer("report_objects_failed").notNull().default(0),
   status: text("status").notNull(),
 });
