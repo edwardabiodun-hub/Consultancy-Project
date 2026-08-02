@@ -49,3 +49,13 @@
 - Focused command: `node --import=tsx --test tests/assessment/email.test.mjs tests/assessment/narrative.test.mjs tests/assessment/task9-closed-set-retry.test.mjs tests/assessment/report-storage.test.mjs tests/assessment/pdf.test.mjs`
 - Result: 65 tests passed, 0 failed.
 - Added regression coverage for concurrent delivery, finalization failure, genuine failed-send retry, concurrent storage claims, claimant-lost cleanup, real matching hash retrieval, and PDF retention disclosures.
+
+## Durable Provider-Started Delivery Follow-up
+
+- Added an atomic D1 transition from the reclaimable pre-provider lease to a non-reclaimable `provider_started|...` state immediately before invoking Resend.
+- Successful sends remain closed to retry when D1 finalization fails, including after Resend's 24-hour idempotency window has expired.
+- A confirmed provider rejection still finalizes the delivery as `failed` and permits an explicit retry.
+
+### Follow-up Verification
+
+- Focused Task 3 suite: 66 tests passed, 0 failed.

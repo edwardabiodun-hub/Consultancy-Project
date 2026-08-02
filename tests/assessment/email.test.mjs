@@ -525,3 +525,41 @@ test("a confirmed failed send releases the claim for one retry", async () => {
   assert.equal(sendCount, 2);
   assert.equal(state, "sent");
 });
+
+test("provider-started delivery remains non-reclaimable after the 24-hour idempotency window", async () => {
+  let now = new Date("2026-08-01T12:00:00.000Z");
+  let state = "pending";
+  let sendCount = 0;
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({ ...baseDeliveryRecord, reportDeliveryStatus: state }),
+    claimDelivery: async () => {
+      if (state.startsWith("provider_started|")) return { status: "busy" };
+      if (state.startsWith("sending|")) {
+        const claimedAt = Date.parse(state.split("|")[1]);
+        if (now.getTime() - claimedAt <= 10 * 60 * 1000) return { status: "busy" };
+      }
+      state = `sending|${now.toISOString()}|claim`;
+      return { status: "claimed", token: state };
+    },
+    markDeliveryProviderStarted: async (_id, token) => {
+      state = `provider_started|${token}`;
+      return state;
+    },
+    finalizeDelivery: async () => { throw new Error("D1 unavailable after provider success"); },
+  });
+  await withEnv(
+    { RESEND_API_KEY: "test-key", ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com" },
+    () => withMockedFetch(async () => {
+      sendCount += 1;
+      return new Response("{}", { status: 200 });
+    }, async () => {
+      const first = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      now = new Date("2026-08-02T13:00:00.000Z");
+      const second = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      assert.equal((await first.json()).status, "sent");
+      assert.equal((await second.json()).status, "already_sent");
+    }),
+  );
+  assert.match(state, /^provider_started\|/);
+  assert.equal(sendCount, 1);
+});

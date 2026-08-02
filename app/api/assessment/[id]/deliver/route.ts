@@ -28,6 +28,7 @@ type HandlerDependencies = {
   markDelivered: (id: string) => Promise<void>;
   loadStoredPdf: (key: string, hash: string) => Promise<StoredPdfLoadResult>;
   claimDelivery: (id: string, currentStatus: string) => Promise<DeliveryClaim>;
+  markDeliveryProviderStarted: (id: string, token: string) => Promise<string | null>;
   finalizeDelivery: (id: string, token: string, outcome: DeliveryOutcome) => Promise<void>;
 };
 
@@ -138,6 +139,26 @@ const claimStoredAssessmentDelivery = async (
     : { status: "busy" };
 };
 
+const markStoredDeliveryProviderStarted = async (
+  id: string,
+  token: string,
+): Promise<string | null> => {
+  const [{ getDb }, { assessmentRecords }] = await Promise.all([
+    import("../../../../../db"),
+    import("../../../../../db/schema"),
+  ]);
+  const providerToken = `provider_started|${token}`;
+  const updated = await getDb()
+    .update(assessmentRecords)
+    .set({ reportDeliveryStatus: providerToken })
+    .where(and(
+      eq(assessmentRecords.id, id),
+      eq(assessmentRecords.reportDeliveryStatus, token),
+    ))
+    .run();
+  return changedRows(updated) === 1 ? providerToken : null;
+};
+
 const finalizeStoredAssessmentDelivery = async (
   id: string,
   token: string,
@@ -190,6 +211,10 @@ export function createAssessmentDeliverHandler(
         ? { status: "sent" }
         : { status: "claimed", token: "injected-delivery-claim" }
       : claimStoredAssessmentDelivery);
+  const markDeliveryProviderStarted = dependencies.markDeliveryProviderStarted
+    ?? (dependencies.findRecord
+      ? async (_id: string, token: string) => token
+      : markStoredDeliveryProviderStarted);
   const finalizeDelivery = dependencies.finalizeDelivery
     ?? (dependencies.markDelivered
       ? async (id: string, _token: string, outcome: DeliveryOutcome) => {
@@ -257,6 +282,14 @@ export function createAssessmentDeliverHandler(
     pdfBytes ??= await buildAssessmentPdf(record);
     const email = buildAssessmentEmail(record);
 
+    let providerToken: string | null;
+    try {
+      providerToken = await markDeliveryProviderStarted(id, deliveryClaim.token);
+    } catch {
+      return deliveryUnavailable();
+    }
+    if (!providerToken) return deliveryUnavailable();
+
     const sent = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -281,7 +314,7 @@ export function createAssessmentDeliverHandler(
 
     if (!sent.ok) {
       try {
-        await finalizeDelivery(id, deliveryClaim.token, "failed");
+        await finalizeDelivery(id, providerToken, "failed");
       } catch {
         // Keep the claim closed when D1 is unavailable; do not risk a duplicate send.
       }
@@ -291,7 +324,7 @@ export function createAssessmentDeliverHandler(
     }
 
     try {
-      await finalizeDelivery(id, deliveryClaim.token, "sent");
+      await finalizeDelivery(id, providerToken, "sent");
     } catch {
       // The email was already sent successfully; a failure to persist the
       // status locally should not be reported as a delivery failure.
