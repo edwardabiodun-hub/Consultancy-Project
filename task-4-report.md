@@ -21,3 +21,7 @@
 - A second `npm run db:generate` returned `No schema changes, nothing to migrate`, proving no duplicate migration drift.
 - Broad R2 outages cap retained failure IDs at 100. Once exceeded, cleanup writes a `partial` audit with zero D1 deletions, avoiding SQLite bind-limit exposure while retaining all records for retry.
 - Focused retention coverage now verifies this broad-outage behavior and audit status/counts.
+
+## P1 re-review fix
+
+- The circuit breaker now activates at the 40th failed record, before the normal audit path can bind a failure list twice near D1's 100-bind ceiling. The exact 40-failure regression verifies a partial audit and no D1 deletion.

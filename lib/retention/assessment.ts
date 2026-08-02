@@ -14,7 +14,7 @@ type ExpiredRecord = {
   report_snapshot_key?: string | null;
   report_pdf_key?: string | null;
 };
-const MAX_RETAINED_FAILURE_IDS = 100;
+const MAX_RETAINED_FAILURE_IDS = 40;
 const sqliteTimestamp = (date: Date): string =>
   date.toISOString().slice(0, 19).replace("T", " ");
 const preDeleteCount = (result: D1Result | undefined): number =>
@@ -69,7 +69,7 @@ export async function runAssessmentRetentionCleanup(
           failed = true;
         }
       }
-      if (failed && failedRecordIds.length < MAX_RETAINED_FAILURE_IDS) {
+      if (failed && failedRecordIds.length + 1 < MAX_RETAINED_FAILURE_IDS) {
         failedRecordIds.push(record.id);
       } else if (failed) {
         skipD1Cleanup = true;

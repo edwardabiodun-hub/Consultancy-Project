@@ -249,9 +249,9 @@ test("privacy, consent, and operations docs disclose internal narrative email an
   assert.match(readme, /npm run cf:migrate/i);
   assert.match(readme, /role-null\s+records are rejected/i);
 });
-test("retention cleanup bounds a broad R2 outage without deleting D1 rows", async () => {
+test("retention cleanup bounds an exact-threshold R2 outage without deleting D1 rows", async () => {
   const prepared = [];
-  const expired = Array.from({ length: 101 }, (_, index) => ({
+  const expired = Array.from({ length: 40 }, (_, index) => ({
     id: `expired-${index}`,
     report_snapshot_key: `snapshot-${index}.json`,
     report_pdf_key: null,
@@ -282,7 +282,7 @@ test("retention cleanup bounds a broad R2 outage without deleting D1 rows", asyn
     createId: () => "cleanup-r2-outage",
   });
   assert.equal(result.status, "partial");
-  assert.equal(result.reportObjectsFailed, 101);
+  assert.equal(result.reportObjectsFailed, 40);
   assert.equal(result.assessmentRecordsDeleted, 0);
   assert.equal(result.assessmentEventsDeleted, 0);
   assert.match(prepared.at(-1).sql, /INSERT INTO retention_cleanup_runs/i);
