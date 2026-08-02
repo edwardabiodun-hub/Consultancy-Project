@@ -169,19 +169,36 @@ const updateStoredNarrativeSource = async (
 const changedRows = (result: unknown): number =>
   Number((result as { meta?: { changes?: number } })?.meta?.changes ?? 0);
 
+export const REPORT_STORAGE_CLAIM_LEASE_MS = 10 * 60 * 1000;
+
+export const isStaleReportStorageClaim = (
+  status: string | null | undefined,
+  now: Date = new Date(),
+): boolean => {
+  if (!status?.startsWith("storing:")) return false;
+  const tokenSeparator = status.lastIndexOf(":");
+  if (tokenSeparator <= "storing:".length) return false;
+  const claimedAt = Date.parse(status.slice("storing:".length, tokenSeparator));
+  return Number.isFinite(claimedAt)
+    && now.getTime() - claimedAt > REPORT_STORAGE_CLAIM_LEASE_MS;
+};
+
 const claimStoredReportStorage = async (
   id: string,
   currentStatus: string | null,
 ): Promise<ReportStorageClaim> => {
   if (currentStatus === "stored") return { status: "stored" };
-  if (currentStatus !== null && currentStatus !== "storage_failed") {
+  const now = new Date();
+  if (currentStatus !== null
+    && currentStatus !== "storage_failed"
+    && !isStaleReportStorageClaim(currentStatus, now)) {
     return { status: "busy" };
   }
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"),
     import("../../../../../db/schema"),
   ]);
-  const token = `storing:${new Date().toISOString()}:${crypto.randomUUID()}`;
+  const token = `storing:${now.toISOString()}:${crypto.randomUUID()}`;
   const statusPredicate = currentStatus === null
     ? isNull(assessmentRecords.reportStorageStatus)
     : eq(assessmentRecords.reportStorageStatus, currentStatus);

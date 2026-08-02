@@ -107,6 +107,39 @@ test("retention cleanup deletes report objects before D1 rows", async () => {
   assert.deepEqual(calls, ["r2:snapshot.json", "r2:report.pdf", "d1"]);
   assert.equal(result.reportObjectsDeleted, 2);
 });
+test("retention cleanup deletes deterministic report keys when D1 metadata was never finalized", async () => {
+  const deleted = [];
+  const reports = { delete: async (key) => deleted.push(key) };
+  const db = {
+    prepare() {
+      return { bind() { return { run: async () => undefined }; } };
+    },
+    async batch(statements) {
+      if (statements.length === 1) {
+        return [{ results: [{
+          id: "orphaned-assessment",
+          report_snapshot_key: null,
+          report_pdf_key: null,
+        }] }];
+      }
+      return [
+        { results: [{ count: 0 }] },
+        { results: [{ count: 1 }] },
+        {}, {}, {},
+      ];
+    },
+  };
+
+  const result = await runAssessmentRetentionCleanup(db, reports, {
+    createId: () => "cleanup-orphaned-r2",
+  });
+
+  assert.deepEqual(deleted, [
+    "assessments/orphaned-assessment/snapshot.json",
+    "assessments/orphaned-assessment/report.pdf",
+  ]);
+  assert.equal(result.reportObjectsDeleted, 2);
+});
 test("retention cleanup treats a missing R2 object as already deleted", async () => {
   const deleted = [];
   const reports = {
@@ -147,8 +180,11 @@ test("retention cleanup treats a missing R2 object as already deleted", async ()
   const result = await runAssessmentRetentionCleanup(db, reports, {
     createId: () => "cleanup-r2-missing",
   });
-  assert.deepEqual(deleted, ["missing.json"]);
-  assert.equal(result.reportObjectsDeleted, 1);
+  assert.deepEqual(deleted, [
+    "missing.json",
+    "assessments/expired-1/report.pdf",
+  ]);
+  assert.equal(result.reportObjectsDeleted, 2);
   assert.equal(result.reportObjectsFailed, 0);
   assert.equal(result.status, "completed");
 });
@@ -282,7 +318,7 @@ test("retention cleanup bounds an exact-threshold R2 outage without deleting D1 
     createId: () => "cleanup-r2-outage",
   });
   assert.equal(result.status, "partial");
-  assert.equal(result.reportObjectsFailed, 40);
+  assert.equal(result.reportObjectsFailed, 80);
   assert.equal(result.assessmentRecordsDeleted, 0);
   assert.equal(result.assessmentEventsDeleted, 0);
   assert.match(prepared.at(-1).sql, /INSERT INTO retention_cleanup_runs/i);

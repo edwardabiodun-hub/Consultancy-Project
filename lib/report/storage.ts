@@ -207,9 +207,15 @@ export async function persistFullReportSnapshot(
     pdfObjectKey: keys.pdfKey,
   };
   const buildPdf = dependencies.buildPdf ?? buildAssessmentPdf;
+  let writesStarted = false;
 
   try {
     const pdfBytes = await buildPdf(input.reportRecord);
+    if (dependencies.ownsClaim && !(await dependencies.ownsClaim())) {
+      throw new Error("Report storage claim lost before object cleanup");
+    }
+    await dependencies.reportStorage.deleteReportObjects(keys);
+    writesStarted = true;
     const pdf = await dependencies.reportStorage.putPdf(keys.pdfKey, pdfBytes);
     const storedSnapshot = await dependencies.reportStorage.putSnapshot(snapshot);
     const metadata: ReportStorageMetadata = {
@@ -235,10 +241,12 @@ export async function persistFullReportSnapshot(
       }
     }
     if (ownsClaim) {
-      try {
-        await dependencies.reportStorage.deleteReportObjects(keys);
-      } catch {
-        // Best-effort cleanup: storage_failed remains authoritative in D1.
+      if (writesStarted) {
+        try {
+          await dependencies.reportStorage.deleteReportObjects(keys);
+        } catch {
+          // Best-effort cleanup: storage_failed remains authoritative in D1.
+        }
       }
       try {
         await dependencies.updateMetadata({

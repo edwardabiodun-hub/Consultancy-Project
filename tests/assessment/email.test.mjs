@@ -526,6 +526,80 @@ test("a confirmed failed send releases the claim for one retry", async () => {
   assert.equal(state, "sent");
 });
 
+test("a synchronous Resend fetch exception releases the provider claim for retry", async () => {
+  let state = "pending";
+  let sendCount = 0;
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({ ...baseDeliveryRecord, reportDeliveryStatus: state }),
+    claimDelivery: async () => {
+      if (!["pending", "failed"].includes(state)) return { status: "busy" };
+      state = `sending|2026-08-01T12:00:00.000Z|claim-${sendCount + 1}`;
+      return { status: "claimed", token: state };
+    },
+    markDeliveryProviderStarted: async (_id, token) => {
+      state = `provider_started|${token}`;
+      return state;
+    },
+    finalizeDelivery: async (_id, token, outcome) => {
+      if (state === token) state = outcome;
+    },
+  });
+
+  await withEnv(
+    { RESEND_API_KEY: "test-key", ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com" },
+    () => withMockedFetch(() => {
+      sendCount += 1;
+      if (sendCount === 1) throw new TypeError("connection setup failed");
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    }, async () => {
+      const first = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      const second = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      assert.equal(first.status, 503);
+      assert.equal(second.status, 200);
+    }),
+  );
+
+  assert.equal(sendCount, 2);
+  assert.equal(state, "sent");
+});
+
+test("an ambiguous rejected Resend request is reported as unavailable and never auto-retried", async () => {
+  let state = "pending";
+  let sendCount = 0;
+  const handler = createAssessmentDeliverHandler({
+    findRecord: async () => ({ ...baseDeliveryRecord, reportDeliveryStatus: state }),
+    claimDelivery: async () => state === "pending"
+      ? { status: "claimed", token: "sending|2026-08-01T12:00:00.000Z|claim" }
+      : { status: "busy" },
+    markDeliveryProviderStarted: async (_id, token) => {
+      state = `provider_started|${token}`;
+      return state;
+    },
+    finalizeDelivery: async (_id, token, outcome) => {
+      if (state === token) state = outcome === "indeterminate"
+        ? `provider_indeterminate|${token}`
+        : outcome;
+    },
+  });
+
+  await withEnv(
+    { RESEND_API_KEY: "test-key", ASSESSMENT_REPORT_FROM_EMAIL: "reports@example.com" },
+    () => withMockedFetch(() => {
+      sendCount += 1;
+      return Promise.reject(new TypeError("connection reset after submission"));
+    }, async () => {
+      const first = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      const second = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
+      assert.equal(first.status, 503);
+      assert.equal(second.status, 503);
+      assert.equal((await second.json()).ok, false);
+    }),
+  );
+
+  assert.match(state, /^provider_indeterminate\|/);
+  assert.equal(sendCount, 1);
+});
+
 test("provider-started delivery remains non-reclaimable after the 24-hour idempotency window", async () => {
   let now = new Date("2026-08-01T12:00:00.000Z");
   let state = "pending";
@@ -557,7 +631,9 @@ test("provider-started delivery remains non-reclaimable after the 24-hour idempo
       now = new Date("2026-08-02T13:00:00.000Z");
       const second = await handler(deliverRequest(assessmentId), { params: Promise.resolve({ id: assessmentId }) });
       assert.equal((await first.json()).status, "sent");
-      assert.equal((await second.json()).status, "already_sent");
+      assert.equal(second.status, 503);
+      assert.equal((await second.json()).ok, false);
+      assert.equal(sendCount, 1);
     }),
   );
   assert.match(state, /^provider_started\|/);

@@ -163,6 +163,41 @@ test("full report persistence stores one PDF, a complete snapshot, and D1 hashes
   }]);
 });
 
+test("a recovered report storage claim removes deterministic orphan keys before writing", async () => {
+  const reportStorageModule = await import("../../lib/report/storage.ts");
+  const calls = [];
+  const keys = createReportObjectKeys(assessmentId);
+  const reportStorage = {
+    deleteReportObjects: async (value) => calls.push(["delete", value]),
+    putPdf: async (key) => {
+      calls.push(["put-pdf", key]);
+      return { pdfKey: key, pdfHash: "pdf-hash" };
+    },
+    putSnapshot: async () => {
+      calls.push(["put-snapshot", keys.snapshotKey]);
+      return { snapshotKey: keys.snapshotKey, snapshotHash: "snapshot-hash" };
+    },
+  };
+
+  await reportStorageModule.persistFullReportSnapshot({
+    assessmentId,
+    assessmentVersion: "1.0.0",
+    createdAt: "2026-07-30T12:00:00.000Z",
+    lead: {}, answers: {}, result: {}, narrative: {}, reportRecord: {},
+  }, {
+    reportStorage,
+    buildPdf: async () => new Uint8Array([37, 80, 68, 70]),
+    updateMetadata: async () => {},
+    ownsClaim: async () => true,
+  });
+
+  assert.deepEqual(calls, [
+    ["delete", keys],
+    ["put-pdf", keys.pdfKey],
+    ["put-snapshot", keys.snapshotKey],
+  ]);
+});
+
 test("full report persistence records storage_failed after an object write fails", async () => {
   const reportStorageModule = await import("../../lib/report/storage.ts");
   const metadata = [];
@@ -227,7 +262,7 @@ test("a persistence attempt that lost its claim never deletes another attempt's 
       updateMetadata: async () => {},
       ownsClaim: async () => false,
     }),
-    /late failure/,
+    /claim lost/i,
   );
   assert.equal(deleteCount, 0);
 });

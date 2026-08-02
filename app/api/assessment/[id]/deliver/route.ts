@@ -22,7 +22,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 type DeliveryClaim =
   | { status: "claimed"; token: string }
   | { status: "busy" | "sent" };
-type DeliveryOutcome = "sent" | "failed";
+type DeliveryOutcome = "sent" | "failed" | "indeterminate";
 type HandlerDependencies = {
   findRecord: (id: string) => Promise<AssessmentDeliveryRecord | null>;
   markDelivered: (id: string) => Promise<void>;
@@ -164,13 +164,15 @@ const finalizeStoredAssessmentDelivery = async (
   token: string,
   outcome: DeliveryOutcome,
 ): Promise<void> => {
+  const status = outcome === "indeterminate"
+    ? `provider_indeterminate|${token}` : outcome;
   const [{ getDb }, { assessmentRecords }] = await Promise.all([
     import("../../../../../db"),
     import("../../../../../db/schema"),
   ]);
   await getDb()
     .update(assessmentRecords)
-    .set({ reportDeliveryStatus: outcome })
+    .set({ reportDeliveryStatus: status })
     .where(and(
       eq(assessmentRecords.id, id),
       eq(assessmentRecords.reportDeliveryStatus, token),
@@ -255,6 +257,10 @@ export function createAssessmentDeliverHandler(
       );
     }
 
+    if (record.reportDeliveryStatus.startsWith("provider_started|")
+      || record.reportDeliveryStatus.startsWith("provider_indeterminate|")) {
+      return deliveryUnavailable();
+    }
     let deliveryClaim: DeliveryClaim;
     try {
       deliveryClaim = await claimDelivery(id, record.reportDeliveryStatus);
@@ -290,7 +296,7 @@ export function createAssessmentDeliverHandler(
     }
     if (!providerToken) return deliveryUnavailable();
 
-    const sent = await fetch("https://api.resend.com/emails", {
+    const resendRequest = {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -310,7 +316,31 @@ export function createAssessmentDeliverHandler(
           },
         ],
       }),
-    });
+    } satisfies RequestInit;
+
+    let sentPromise: Promise<Response>;
+    try {
+      sentPromise = fetch("https://api.resend.com/emails", resendRequest);
+    } catch {
+      try {
+        await finalizeDelivery(id, providerToken, "failed");
+      } catch {
+        // A failed reconciliation leaves provider_started closed to retries.
+      }
+      return deliveryUnavailable();
+    }
+
+    let sent: Response;
+    try {
+      sent = await sentPromise;
+    } catch {
+      try {
+        await finalizeDelivery(id, providerToken, "indeterminate");
+      } catch {
+        // Preserve provider_started when submission may have occurred.
+      }
+      return deliveryUnavailable();
+    }
 
     if (!sent.ok) {
       try {

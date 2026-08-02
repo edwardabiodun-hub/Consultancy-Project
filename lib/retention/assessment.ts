@@ -1,3 +1,5 @@
+import { createReportObjectKeys } from "../report/storage";
+
 type D1Result = {
   meta?: { changes?: number };
   results?: Array<Record<string, unknown>>;
@@ -59,7 +61,11 @@ export async function runAssessmentRetentionCleanup(
     for (const record of (expiredRecords[0]?.results ??
       []) as ExpiredRecord[]) {
       let failed = false;
-      for (const key of [record.report_snapshot_key, record.report_pdf_key]) {
+      const deterministicKeys = createReportObjectKeys(record.id);
+      for (const key of [
+        record.report_snapshot_key ?? deterministicKeys.snapshotKey,
+        record.report_pdf_key ?? deterministicKeys.pdfKey,
+      ]) {
         if (!key) continue;
         try {
           await reports.delete(key);

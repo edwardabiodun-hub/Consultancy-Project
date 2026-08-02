@@ -9,6 +9,8 @@ import {
 import { toAssessmentRecord } from "../../lib/assessment/record.ts";
 import {
   createAssessmentNarrativeHandler,
+  isStaleReportStorageClaim,
+  REPORT_STORAGE_CLAIM_LEASE_MS,
 } from "../../app/api/assessment/[id]/narrative/route.ts";
 
 // Closed-set model-boundary and fallback coverage lives in
@@ -19,6 +21,27 @@ import {
 // ---------------------------------------------------------------------------
 
 const assessmentId = "8d7b76ca-86bf-46a6-88f4-42b6dfecd159";
+
+test("report storage claims become reclaimable only after their lease expires", () => {
+  const claimedAt = "2026-08-01T12:00:00.000Z";
+  const status = `storing:${claimedAt}:claim-1`;
+
+  assert.equal(
+    isStaleReportStorageClaim(
+      status,
+      new Date(Date.parse(claimedAt) + REPORT_STORAGE_CLAIM_LEASE_MS),
+    ),
+    false,
+  );
+  assert.equal(
+    isStaleReportStorageClaim(
+      status,
+      new Date(Date.parse(claimedAt) + REPORT_STORAGE_CLAIM_LEASE_MS + 1),
+    ),
+    true,
+  );
+  assert.equal(isStaleReportStorageClaim("storing:not-a-date:claim-1"), false);
+});
 
 const validPayload = {
   answers: {
