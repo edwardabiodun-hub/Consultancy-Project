@@ -3,7 +3,8 @@ export type ResourceBlock =
   | { kind: "heading"; text: string }
   | { kind: "quote"; text: string }
   | { kind: "list"; items: string[] }
-  | { kind: "callout"; text: string };
+  | { kind: "callout"; text: string }
+  | { kind: "image"; src: string; alt: string; caption: string };
 
 export const resourceArticles: Record<string, {
   deck: string;
@@ -22,14 +23,17 @@ export const resourceArticles: Record<string, {
       { kind: "paragraph", text: "Most organizations unknowingly pay what RunRate calls the Last-Minute Assembly Tax. Someone exports CRM data. Finance updates spreadsheets. Operations sends production numbers. Sales managers revise forecasts. Leadership waits while someone reconciles conflicting figures." },
       { kind: "paragraph", text: "By the time everything is assembled, several hours or even days have been consumed simply trying to answer a basic question: what is actually happening in the business?" },
       { kind: "callout", text: "If executives must manually assemble the truth every reporting cycle, the reporting system itself has become operational work." },
+      { kind: "image", src: "/insights/stuck-in-reporting-trap.png", alt: "Illustration of manual data assembly across disconnected CRM, finance, operations, and project systems", caption: "The Last-Minute Assembly Tax: manual, siloed reporting consumes leadership time before decisions can be made." },
       { kind: "heading", text: "Rearview mirror management" },
       { kind: "paragraph", text: "Traditional executive reports are designed to explain the past: revenue versus budget, gross margin versus prior year, operating expenses, pipeline summaries, utilization, and customer satisfaction. These metrics are useful, but by themselves they rarely improve performance." },
       { kind: "list", items: ["What happened?", "How did we perform?", "Where did we miss target?"] },
       { kind: "paragraph", text: "Leadership teams also need reports that answer different questions." },
       { kind: "list", items: ["What is changing?", "Where is risk increasing?", "Which decision requires attention this week?", "What should we do next?"] },
+      { kind: "image", src: "/insights/rearview-mirror-management.png", alt: "Split illustration comparing rearview mirror management with live operating signals", caption: "Historical reporting explains what already happened. Decision-ready reporting surfaces signals while there is still time to act." },
       { kind: "heading", text: "Signal versus noise" },
       { kind: "paragraph", text: "A common misconception is that better reporting means more metrics. In reality, more metrics usually create more interpretation. When every dashboard contains dozens of charts, executives spend meetings debating numbers rather than making decisions." },
       { kind: "callout", text: "Every executive metric should either trigger a decision, confirm a strategic assumption, or highlight emerging risk." },
+      { kind: "image", src: "/insights/signal-or-management-noise.png", alt: "Funnel diagram filtering management noise into actionable operating signals", caption: "A decision-driven filter turns scattered reporting noise into a short list of signals that deserve executive attention." },
       { kind: "heading", text: "Redesign reporting around decisions" },
       { kind: "paragraph", text: "The most effective leadership teams reverse the traditional reporting model. Instead of starting with available data, they start with recurring executive decisions." },
       { kind: "list", items: ["Should we hire additional capacity?", "Is revenue at risk this quarter?", "Which customers require executive attention?", "Are delivery commitments achievable?", "Where should investment be prioritized?"] },
@@ -44,6 +48,7 @@ export const resourceArticles: Record<string, {
       { kind: "list", items: ["Integrate core systems.", "Standardize definitions.", "Eliminate duplicate data entry.", "Automate recurring calculations.", "Present information visually."] },
       { kind: "heading", text: "A practical framework for leadership" },
       { kind: "list", items: ["Audit every recurring report, preparation time, manual effort, source system, and duplicated metric.", "Map recurring executive decisions to the smallest set of leading indicators needed to support them.", "Automate recurring data movement, KPI updates, exception monitoring, and executive summaries.", "Adopt exception-based management so meetings focus on risks, deviations, decisions, and corrective action."] },
+      { kind: "image", src: "/insights/automated-visibility-plan.png", alt: "Three-step plan for improving executive reporting and automated visibility", caption: "A practical sequence: audit the current reporting stack, map decisions to lead indicators, then automate recurring data flow." },
       { kind: "heading", text: "Where to begin" },
       { kind: "paragraph", text: "If your executive team still spends hours collecting, reconciling, and validating information before every management meeting, the reporting process itself deserves attention." },
       { kind: "list", items: ["Identify the manual effort hidden inside your reporting cycle.", "Clarify which operating signals truly drive executive decisions.", "Automate repetitive data movement.", "Design dashboards around exceptions rather than historical explanation."] },
@@ -72,15 +77,18 @@ export const resourceArticles: Record<string, {
       { kind: "heading", text: "3. Shadow systems" },
       { kind: "paragraph", text: "One of the strongest signs of operational friction is the existence of unofficial systems: personal spreadsheets, handwritten notes, private task lists, email reminders, duplicated data entry, and unofficial approval trackers." },
       { kind: "paragraph", text: "Employees rarely build shadow systems because they enjoy extra work. They build them because the official process no longer supports reality." },
+      { kind: "image", src: "/insights/hidden-sources-operational-friction.png", alt: "Diagram showing unclear ownership, process variation, and shadow systems as sources of operational friction", caption: "The three most common sources of operational friction are ownership gaps, workflow variation, and unofficial shadow systems." },
       { kind: "heading", text: "The pre-automation blueprint" },
       { kind: "paragraph", text: "Businesses that implement automation successfully tend to follow a disciplined approach before selecting technology." },
       { kind: "list", items: ["Map the process exactly as it operates today, not how leadership believes it operates.", "Challenge every activity before automating it.", "Establish one accountable owner, supporting contributors, escalation triggers, approval limits, and success measures."] },
       { kind: "callout", text: "You cannot improve what you cannot clearly describe." },
+      { kind: "image", src: "/insights/pre-automation-blueprint.png", alt: "Blueprint showing workflow mapping, simplification, and accountability before automation", caption: "The pre-automation blueprint: understand the workflow, simplify it, then assign clear accountability before selecting technology." },
       { kind: "heading", text: "Applying practical AI and automation" },
       { kind: "paragraph", text: "Once workflows have been clarified and standardized, AI becomes a force multiplier. The question shifts from where can we use AI to which work should AI perform." },
       { kind: "paragraph", text: "The highest-value automation candidates are repetitive, rules-based, high volume, consistent, measurable, and low judgment." },
       { kind: "list", items: ["Recurring reporting", "Data reconciliation", "Document routing", "Notification workflows", "Information retrieval", "Routine approvals within defined thresholds"] },
       { kind: "paragraph", text: "The objective is not replacing people. It is removing repetitive work so people spend more time applying judgment where it matters." },
+      { kind: "image", src: "/insights/where-practical-ai-creates-value.png", alt: "Diagram showing where practical AI creates value after workflow clarity exists", caption: "Practical AI creates value after workflow clarity exists, not before." },
       { kind: "heading", text: "Choose workflows before choosing tools" },
       { kind: "paragraph", text: "One of the most common implementation mistakes is selecting software first. Organizations get excited by platform demonstrations and then try to reshape operations around the application." },
       { kind: "paragraph", text: "Begin with the workflow. Understand the required outcome, which information must move, where decisions occur, who owns each stage, and which integrations are actually necessary." },

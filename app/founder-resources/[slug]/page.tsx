@@ -34,6 +34,14 @@ export default async function ResourcePage({ params }: { params: Promise<{ slug:
           if (block.kind === "heading") return <h2 key={index}>{block.text}</h2>;
           if (block.kind === "quote") return <blockquote key={index}>{block.text}</blockquote>;
           if (block.kind === "callout") return <div className="callout" key={index}><strong>{block.text}</strong></div>;
+          if (block.kind === "image") {
+            return (
+              <figure className="resource-figure" key={index}>
+                <img src={block.src} alt={block.alt} loading="lazy" />
+                <figcaption>{block.caption}</figcaption>
+              </figure>
+            );
+          }
           if (block.kind === "list") {
             return (
               <ul key={index}>

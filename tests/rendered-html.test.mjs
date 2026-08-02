@@ -231,6 +231,10 @@ test("insight Explore links render the provided article and guide drafts", async
   assert.match(executiveHtml, /The executive reporting trap/i);
   assert.match(executiveHtml, /Last-Minute Assembly Tax/i);
   assert.match(executiveHtml, /Build an automated truth engine/i);
+  assert.match(executiveHtml, /\/insights\/stuck-in-reporting-trap\.png/);
+  assert.match(executiveHtml, /\/insights\/rearview-mirror-management\.png/);
+  assert.match(executiveHtml, /\/insights\/signal-or-management-noise\.png/);
+  assert.match(executiveHtml, /\/insights\/automated-visibility-plan\.png/);
 
   const automationResponse = await request("/founder-resources/automation-before-ai");
   assert.equal(automationResponse.status, 200);
@@ -238,6 +242,9 @@ test("insight Explore links render the provided article and guide drafts", async
   assert.match(automationHtml, /The automation trap/i);
   assert.match(automationHtml, /The pre-automation blueprint/i);
   assert.match(automationHtml, /Technology scales process quality/i);
+  assert.match(automationHtml, /\/insights\/hidden-sources-operational-friction\.png/);
+  assert.match(automationHtml, /\/insights\/pre-automation-blueprint\.png/);
+  assert.match(automationHtml, /\/insights\/where-practical-ai-creates-value\.png/);
 });
 test("assessment and paid diagnostic remain separate, non-overlapping routes", async () => {
   const [diagnosticHtml, assessmentHtml] = await Promise.all([
