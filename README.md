@@ -1,4 +1,4 @@
-# vinext-starter
+﻿# vinext-starter
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
@@ -246,9 +246,31 @@ run, not just manually.
 Compact D1 assessment records, related assessment events, and R2 report objects are retained for a 90-day period and removed by the next daily cleanup, normally within 24 hours after the 90-day mark. A Cloudflare cleanup scheduled for 03:17 UTC each day deletes expired R2 snapshot/PDF objects, removes eligible D1 data, and writes the cutoff, D1 deletion counts, R2 object deletion counts, failures, and completion status to `retention_cleanup_runs` for auditability. If R2 deletion fails for a small number of records, those D1 records are retained for a later cleanup attempt; broad R2 failure records a partial cleanup and skips D1 deletion. D1 retains validated closed-set selection IDs so delivery retries can reconstruct the accepted local narrative, while R2 stores the complete report snapshot and generated PDF for the retention period. The internal notification mailbox copy sent to `info@runrategroup.com` contains name, email, company, role, deterministic result, and accepted narrative. Mailbox deletion follows the same 90-day operational policy managed outside the website application; it is not application-enforced. OpenAI receives only candidate block IDs, with no identity, raw answers, evidence, numeric results, or prose. A respondent may request earlier correction or deletion using the contact page.
 
 ### Production smoke-test checklist
-This is a manual checklist for a human to run after any future deployment
-(deployment itself is out of scope for this document - no production
-deployment has occurred as of this writing):
+### Production deployment outcome - 2026-08-02
+
+- Production URL: https://www.runrategroup.com
+- Worker URL: https://runrate-advisory.edward-abiodun.workers.dev
+- Cloudflare Worker version ID: `7cfe7636-5803-488a-9f16-8ebf3256477c`
+- Source commit SHA: `3a16471420620b64629fc5b5489ff559dc7ac7a9`
+- Verification date: 2026-08-02
+- Live smoke assessment ID: `7d418856-453d-4bd4-a665-692e464e7db9`
+
+Verified in production:
+
+- `/api/assessment/calculate` returned `persistenceAvailable: true`.
+- `/api/assessment/{id}/narrative` returned `narrative.source: "ai"` and `internalNotificationAccepted: true`.
+- D1 stored `narrative_source = ai`, `report_storage_status = stored`, `internal_notification_status = sent`, and `report_delivery_status = sent`.
+- R2 stored both `assessments/{assessmentId}/snapshot.json` and `assessments/{assessmentId}/report.pdf`.
+- `/api/assessment/{id}/report` returned a seven-page PDF.
+- Rules fallback remains covered by automated tests for missing or failed AI configuration; do not disable production AI secrets just to test fallback unless a maintenance window is approved.
+
+Known operational notes:
+
+- Complete assessment report snapshots, generated PDFs, complete answers, and accepted AI/rules narrative are retained in encrypted Cloudflare R2 storage for 90 days.
+- Mailbox retention for `info@runrategroup.com` follows the separate 90-day operational policy outside the website application.
+- Ambiguous Resend provider-started or provider-indeterminate delivery states are intentionally not auto-retried; they require manual reconciliation to avoid duplicate emails.
+
+This is the manual checklist for a human to run after any future deployment:
 
 - [ ] `/assessment` loads and the six-question flow can be completed with the
       keyboard.
