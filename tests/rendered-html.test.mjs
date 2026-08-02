@@ -240,19 +240,24 @@ test("assessment and paid diagnostic remain separate, non-overlapping routes", a
   );
 });
 
-test("privacy route describes the 90-day retention policy and deletion channel", async () => {
+test("privacy route describes complete R2 report retention, access limits, and deletion", async () => {
   const response = await request("/privacy");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /compact D1 record retains/i);
   assert.match(
     html,
-    /retained for a 90-day period.*normally within 24 hours after the 90-day mark/i,
+    /complete assessment answers, report snapshot, generated PDF, and accepted AI\/rules narrative.*encrypted Cloudflare R2 storage/i,
   );
   assert.match(
     html,
-    /request correction or deletion of inquiry or assessment information during the retention period by using the contact page/i,
+    /stored in encrypted Cloudflare R2 storage for 90 days.*normally within 24 hours after the 90-day mark/i,
   );
+  assert.match(html, /respondent report link and authorized RunRate follow-up/i);
+  assert.match(
+    html,
+    /request deletion.*using the contact page/i,
+  );
+  assert.doesNotMatch(html, /raw answers.*not retained|full reports.*not retained/i);
 });
 
 test("assessment calculation succeeds whether or not the optional phone and marketing consent fields are provided", async (t) => {

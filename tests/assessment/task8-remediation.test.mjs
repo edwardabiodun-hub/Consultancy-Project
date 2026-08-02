@@ -281,19 +281,19 @@ test("migration marks retained records attempted and removes historical raw find
   assert.match(sql, /UPDATE assessment_records[\s\S]*narrative_attempt_status\s*=\s*'attempted'/i);
   assert.match(sql, /findings_json\s*=\s*'\[\]'/i);
 });
-test("PDF methodology describes normalized findings without implying question-level evidence retention", async () => {
+test("PDF methodology describes report retention without stale raw-answer language", async () => {
   const pdfSource = await readFile(new URL("lib/report/pdf.ts", projectRoot), "utf8");
-  assert.match(pdfSource, /normalized derived codes/i);
-  assert.doesNotMatch(pdfSource, /question and option labels reconstruct/i);
+  assert.match(pdfSource, /Complete submitted answers, the generated PDF, and the accepted narrative are retained for 90 days/i);
+  assert.doesNotMatch(pdfSource, /raw answers[^.]*not retained/i);
 });
-test("retention copy describes the 90-day period, daily cleanup lag, and operational mailbox policy", async () => {
+test("retention copy describes the 90-day policy, daily cleanup lag, and operational mailbox policy", async () => {
   const [privacy, gate, readme] = await Promise.all([
     readFile(new URL("app/privacy/page.tsx", projectRoot), "utf8"),
     readFile(new URL("app/assessment/ContactGate.tsx", projectRoot), "utf8"),
     readFile(new URL("README.md", projectRoot), "utf8"),
   ]);
   for (const source of [privacy, gate, readme]) {
-    assert.match(source, /90-day period/i);
+    assert.match(source, /90 days|90-day retention policy/i);
     assert.match(source, /normally within 24 hours/i);
     assert.doesNotMatch(source, /up to 90 days/i);
   }

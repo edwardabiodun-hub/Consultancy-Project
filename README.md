@@ -16,7 +16,7 @@ npm run dev
 npm run build
 ```
 
-`wrangler.jsonc` is the committed Cloudflare deployment source for the Worker, D1 database, assets, Images binding, rate limiters, and retention schedule.
+`wrangler.jsonc` is the committed Cloudflare deployment source for the Worker, D1 database, R2 report bucket, assets, Images binding, rate limiters, and retention schedule.
 
 ## Included Shape
 
@@ -132,11 +132,13 @@ past results without silently re-scoring them.
   `ContactGate.tsx`, `PrecisionInputs.tsx`/`BandedCapacityInputs.tsx`,
   `FullResult.tsx`).
 - `lib/report/pdf.ts` - builds the seven-page executive-summary PDF from a
-  compact persisted record (no raw answers or free text).
+  persisted assessment record.
+- `lib/report/storage.ts` - stores the complete report snapshot and generated
+  PDF in the `REPORTS` R2 bucket under assessment-scoped object keys.
 - `lib/email/assessment-report.ts` and
   `app/api/assessment/[id]/deliver/route.ts` - optional report email delivery
   via Resend.
-- `lib/assessment/narrative.ts` - the result screen renders the deterministic result and rules summary first, then requests an optional closed-set narrative selection. OpenAI receives only finite candidate block IDs for locally approved text. It receives no identity, raw answers, raw evidence, numeric results, risk prose, priority prose, or other narrative text. Missing, duplicate, unknown, or incompatible IDs cause a complete rules fallback. The endpoint uses per-assessment and global service rate limits, and an atomic D1 claim permits at most one OpenAI attempt for the lifetime of each assessment. One durable internal notification goes to `info@runrategroup.com` with respondent name, email, company, role, deterministic result, and the accepted local narrative. Phone, raw answers, and free text are excluded. Narrative prose is not persisted in D1; only the `ai` or `rules` source tag, validated closed-set selection IDs, and non-reversible notification payload hash are retained.
+- `lib/assessment/narrative.ts` - the result screen renders the deterministic result and rules summary first, then requests an optional closed-set narrative selection. OpenAI receives only finite candidate block IDs for locally approved text. It receives no identity, raw answers, raw evidence, numeric results, risk prose, priority prose, or other narrative text. Missing, duplicate, unknown, or incompatible IDs cause a complete rules fallback. The endpoint uses per-assessment and global service rate limits, and an atomic D1 claim permits at most one OpenAI attempt for the lifetime of each assessment. One durable internal notification goes to `info@runrategroup.com` with respondent name, email, company, role, deterministic result, and the accepted local narrative. Phone, raw answers, and free text are excluded from that mailbox notification. Narrative prose is not stored in D1. D1 stores only the `ai` or `rules` source tag, validated closed-set selection IDs, and non-reversible notification payload hash; the complete accepted narrative is retained in the R2 report snapshot.
 ### Environment variables
 
 From `.env.example`. None are required for the assessment to function in
@@ -153,8 +155,34 @@ fully configured.
 | `OPENAI_API_KEY` | AI-selected local narrative | Narrative source falls back to the deterministic rules summary |
 | `ASSESSMENT_NARRATIVE_MODEL` | AI-selected local narrative | Same as above - **both** `OPENAI_API_KEY` and `ASSESSMENT_NARRATIVE_MODEL` must be set together, or the rules narrative is used |
 
+Cloudflare bindings:
+
+- `DB` - optional D1 binding for compact assessment records, event/audit data,
+  delivery state, and retention cleanup runs.
+- `REPORTS` - optional R2 binding declared in `.openai/hosting.json` and
+  `wrangler.jsonc` for the `runrate-advisory-reports` bucket. It stores the
+  full report package for consenting respondents.
+
+### Report storage and access
+
+When report consent is accepted and persistence is available, the narrative
+endpoint writes two R2 objects using `assessments/{assessmentId}/snapshot.json`
+and `assessments/{assessmentId}/report.pdf`. The snapshot schema is
+`schemaVersion`, `assessmentId`, `assessmentVersion`, `createdAt`, `lead`,
+`answers`, `result`, `narrative`, and `pdfObjectKey`. D1 stores only the object
+keys, hashes, storage status, and compact assessment metadata needed for delivery
+and cleanup.
+
+The consent and privacy copy disclose that complete assessment answers, report
+snapshot, generated PDF, and accepted AI/rules narrative are stored in
+encrypted Cloudflare R2 storage for 90 days. Access is limited to the respondent report link and
+authorized RunRate follow-up, and respondents can request deletion through the
+contact page.
+
 D1 (`DB` binding, declared in `.openai/hosting.json`) is likewise optional at
 runtime: see [Local rules-only mode](#local-rules-only-mode).
+
+`REPORTS` is also optional at runtime; when it is absent, report storage uses the fallback behavior documented below.
 
 ### D1 schema and migrations
 
@@ -172,17 +200,11 @@ dialect against `db/schema.ts`. Applying generated migrations to the live D1
 database is a deployment-time step for the `DB` binding declared in
 `wrangler.jsonc`.
 
-Before enabling this release in production, apply all pending D1 migrations
-through `drizzle/0007_happy_dust.sql` with `npm run cf:migrate`. Migrations
-`0005` through `0007` provide the persisted role, internal notification claim
-and hash fields, narrative-attempt state, normalized findings, and closed-set
-selection IDs required by the narrative endpoint. Pre-migration role-null
-records are rejected rather than allowing a weaker match; submit a new
-assessment after migration.
+Before enabling this release in production, apply all pending D1 migrations through the latest committed migration with `npm run cf:migrate`. Migrations `0005` through `0007` provide the persisted role, internal notification claim and hash fields, narrative-attempt state, normalized findings, and closed-set selection IDs required by the narrative endpoint. Migrations `0008` and `0009` add the R2 report snapshot/PDF metadata and retention-cleanup audit fields required for full report storage. Pre-migration role-null records are rejected rather than allowing a weaker match; submit a new assessment after migration.
 
 ### Local rules-only mode
 
-With no `DB` binding, no `RESEND_API_KEY`, and no
+With no `DB` binding, no `REPORTS` binding, no `RESEND_API_KEY`, and no
 `OPENAI_API_KEY`/`ASSESSMENT_NARRATIVE_MODEL` configured - the default state
 of a fresh checkout - the assessment still fully functions:
 
@@ -195,6 +217,10 @@ of a fresh checkout - the assessment still fully functions:
   email-report actions.
 - The narrative is always the deterministic rules summary
   (`result.narrative.source === "rules"`).
+- If `REPORTS` is unavailable or an R2 write fails after D1 persistence exists,
+  the route records `reportStorageStatus: "storage_failed"`, keeps the accepted
+  on-screen narrative available, and the report/download paths fall back to
+  compact D1 reconstruction where possible.
 - Contact-form and report-email delivery return `503` with an explicit
   "not yet configured" error rather than a silent failure or a false success.
 
@@ -217,7 +243,7 @@ run, not just manually.
 - **AI narrative**: `lib/assessment/narrative.ts` calls OpenAI only when both `OPENAI_API_KEY` and `ASSESSMENT_NARRATIVE_MODEL` are set and the assessment wins its one-time atomic claim. The model receives only finite candidate block IDs and returns only selected IDs under a strict JSON schema. All displayed and emailed prose is authored locally. Validated selection IDs are retained so a notification retry reconstructs the identical local narrative and payload hash without a second OpenAI call. Existing or failed-attempt records without a valid retained selection use the complete deterministic rules narrative. Missing configuration, exhausted service budget, network error, timeout, malformed output, duplicate IDs, unknown IDs, or incompatible IDs also falls back to rules. AI selection cannot alter scores, capacity, routing, or the local priority library.
 ### Data deletion procedure
 
-Compact D1 assessment records and related assessment events are retained for a 90-day period and removed by the next daily cleanup, normally within 24 hours after the 90-day mark. A Cloudflare cleanup scheduled for 03:17 UTC each day deletes expired data and writes the cutoff and deletion counts to `retention_cleanup_runs` for auditability. Narrative prose is not stored in D1; validated closed-set selection IDs may be retained to reproduce an accepted local narrative for delivery retries. The internal notification mailbox copy sent to `info@runrategroup.com` contains name, email, company, role, deterministic result, and accepted narrative. Mailbox deletion follows the same 90-day operational policy managed outside the website application; it is not application-enforced. OpenAI receives only candidate block IDs, with no identity, raw answers, evidence, numeric results, or prose. A respondent may request earlier correction or deletion using the contact page.
+Compact D1 assessment records, related assessment events, and R2 report objects are retained for a 90-day period and removed by the next daily cleanup, normally within 24 hours after the 90-day mark. A Cloudflare cleanup scheduled for 03:17 UTC each day deletes expired R2 snapshot/PDF objects, removes eligible D1 data, and writes the cutoff, D1 deletion counts, R2 object deletion counts, failures, and completion status to `retention_cleanup_runs` for auditability. If R2 deletion fails for a small number of records, those D1 records are retained for a later cleanup attempt; broad R2 failure records a partial cleanup and skips D1 deletion. D1 retains validated closed-set selection IDs so delivery retries can reconstruct the accepted local narrative, while R2 stores the complete report snapshot and generated PDF for the retention period. The internal notification mailbox copy sent to `info@runrategroup.com` contains name, email, company, role, deterministic result, and accepted narrative. Mailbox deletion follows the same 90-day operational policy managed outside the website application; it is not application-enforced. OpenAI receives only candidate block IDs, with no identity, raw answers, evidence, numeric results, or prose. A respondent may request earlier correction or deletion using the contact page.
 
 ### Production smoke-test checklist
 This is a manual checklist for a human to run after any future deployment

@@ -230,7 +230,7 @@ test("privacy, consent, and operations docs disclose internal narrative email an
     readFile(new URL("README.md", projectRoot), "utf8"),
   ]);
   for (const source of [privacy, readme]) {
-    assert.match(source, /90-day period/i);
+    assert.match(source, /90 days|90-day retention policy/i);
     assert.match(source, /normally within 24 hours/i);
     assert.doesNotMatch(source, /up to 90 days/i);
     assert.match(source, /03:17 UTC/i);
@@ -243,7 +243,7 @@ test("privacy, consent, and operations docs disclose internal narrative email an
     assert.match(source, /mailbox/is);
   }
   assert.match(gate, /internal assessment notification/i);
-  assert.match(gate, /90-day period/i);
+  assert.match(gate, /90 days/i);
   assert.match(readme, /0007_happy_dust\.sql/i);
   assert.match(readme, /wrangler\.jsonc/i);
   assert.match(readme, /npm run cf:migrate/i);

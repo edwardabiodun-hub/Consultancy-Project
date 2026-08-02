@@ -143,6 +143,19 @@ test.beforeEach(() => {
   globalThis.fetch = successfulCalculationFetch;
 });
 
+test("report consent discloses the complete R2 report retention and access limits", async () => {
+  const user = userEvent.setup();
+  renderAssessment();
+  await reachPreliminary(user);
+  await user.click(screen.getByRole("button", { name: "Unlock my full assessment" }));
+
+  const disclosure = screen.getByText(/complete assessment answers, report snapshot, generated PDF, and accepted AI\/rules narrative/i);
+  assert.match(disclosure.textContent, /encrypted Cloudflare R2 storage.*90 days/i);
+  assert.match(disclosure.textContent, /respondent report link and authorized RunRate follow-up/i);
+  assert.match(disclosure.textContent, /deletion.*contact page/i);
+  assert.doesNotMatch(disclosure.textContent ?? "", /raw answers.*not retained|full reports.*not retained/i);
+});
+
 test("the six required context fields gate entry to scored questions", async () => {
   const user = userEvent.setup();
   renderAssessment();

@@ -195,7 +195,7 @@ export function ContactGate({
               }
             />
             <span>
-              I consent to generate and email my assessment report and send an internal assessment notification to RunRate Advisory using these details. Assessment records are retained for a 90-day period and removed by the next daily cleanup, normally within 24 hours after the 90-day mark. The notification mailbox follows the same operational policy.
+              I consent to generate and email my assessment report and send an internal assessment notification to RunRate Advisory using these details. Complete assessment answers, report snapshot, generated PDF, and accepted AI/rules narrative are stored in encrypted Cloudflare R2 storage for 90 days and removed by the next daily cleanup, normally within 24 hours after the 90-day mark. Access is limited to the respondent report link and authorized RunRate follow-up. I may request deletion through the contact page. The notification mailbox follows the same 90-day operational policy.
             </span>
           </label>
           {showError("reportConsent") && (
@@ -216,7 +216,7 @@ export function ContactGate({
           </label>
           <p>
             Phone is optional. Marketing updates are optional and independent from report
-            delivery. The compact D1 record includes your contact, consent, result, and delivery fields; the internal mailbox retains the approved narrative notification.
+            delivery. The compact D1 record includes contact, consent, result, and delivery metadata; Cloudflare R2 stores the complete report package; and the internal mailbox retains the approved narrative notification.
           </p>
         </div>
 
