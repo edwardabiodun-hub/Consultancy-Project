@@ -101,7 +101,7 @@ test("orders shared header navigation around education before assessment", async
     "Automate Manual Operations",
     "Insights",
     "About Eddie",
-    "Take the assessment",
+    "Take the Assessment",
     "Start a Conversation",
   ];
   const positions = labels.map((label) => header.indexOf(label));

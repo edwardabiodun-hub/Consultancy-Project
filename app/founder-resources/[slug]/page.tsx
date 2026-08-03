@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { resourceArticles } from "../../../content/resource-articles";
 import { resources } from "../../../content/resources";
+import { Breadcrumbs } from "../../../components/SiteParts";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -20,18 +21,33 @@ export default async function ResourcePage({ params }: { params: Promise<{ slug:
   if (!resource) notFound();
   const article = resourceArticles[resource.slug];
 
-  return (
-    <article className="content shell resource-body">
-      <header className="page-hero">
-        <div className="eyebrow">{resource.type}</div>
-        <h1>{resource.title}</h1>
-        <p>{article?.deck ?? resource.summary}</p>
-        {article ? <p className="resource-reading-time">Estimated reading time: {article.readingTime}</p> : null}
-      </header>
+  const headings = article?.blocks.filter((block) => block.kind === "heading").map((block) => block.text) ?? [];
 
-      {article ? (
+  return (
+    <>
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { href: "/founder-resources", label: "Insights" }, { label: resource.title }]} />
+      <article className="content shell resource-body">
+        <header className="page-hero">
+          <div className="eyebrow">{resource.type}</div>
+          <h1>{resource.title}</h1>
+          <p>{article?.deck ?? resource.summary}</p>
+          {article ? <p className="resource-reading-time">Estimated reading time: {article.readingTime}</p> : null}
+        </header>
+
+        {headings.length > 0 ? (
+          <nav className="toc-card" aria-label="Article sections">
+            <strong>In this piece</strong>
+            <ol>
+              {headings.slice(0, 6).map((heading) => (
+                <li key={heading}><a href={`#${heading.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`}>{heading}</a></li>
+              ))}
+            </ol>
+          </nav>
+        ) : null}
+
+        {article ? (
         article.blocks.map((block, index) => {
-          if (block.kind === "heading") return <h2 key={index}>{block.text}</h2>;
+          if (block.kind === "heading") { const id = block.text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""); return <h2 id={id} key={index}>{block.text}</h2>; }
           if (block.kind === "quote") return <blockquote className="resource-quote" key={index}>{block.text}</blockquote>;
           if (block.kind === "divider") return <hr className="resource-divider" key={index} />;
           if (block.kind === "callout") {
@@ -96,9 +112,20 @@ export default async function ResourcePage({ params }: { params: Promise<{ slug:
         </>
       )}
 
-      <h2>What to do next</h2>
-      <div className="callout"><strong>{resource.action}</strong></div>
-      <Link className="button" href="/diagnostic">Review the Business Independence Diagnostic →</Link>
-    </article>
+      <div className="conversion-panel resource-next-step">
+          <div className="eyebrow">Next step</div>
+          <h2>Turn this insight into an operating signal.</h2>
+          <p><strong>{resource.action}</strong></p>
+          <div className="actions">
+            <Link className="button" href="/assessment">Take the Assessment</Link>
+            <Link className="button secondary" href="/diagnostic">Review the Diagnostic</Link>
+          </div>
+        </div>
+      </article>
+    </>
   );
 }
+
+
+
+

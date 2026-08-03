@@ -1,4 +1,4 @@
-import { PageHero } from "../../components/SiteParts";
+import { Breadcrumbs, PageHero } from "../../components/SiteParts";
 import ContactForm from "./ContactForm";
 
 export const metadata = {
@@ -9,12 +9,13 @@ export const metadata = {
 export default function Contact() {
   return (
     <>
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { label: "Start a Conversation" }]} />
       <PageHero eyebrow="Start a conversation" title="Describe what keeps coming back to you.">
         Share the recurring dependency, its operating context, and what you want to change. The first
         conversation determines whether the Business Independence Diagnostic is an appropriate next step.
       </PageHero>
       <div className="content shell contact-grid">
-        <aside>
+        <aside className="conversion-panel">
           <h2>What happens next</h2>
           <ol>
             <li>I review the operating context and qualification information.</li>
@@ -29,3 +30,7 @@ export default function Contact() {
     </>
   );
 }
+
+
+
+

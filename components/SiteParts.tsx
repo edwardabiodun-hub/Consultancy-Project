@@ -4,6 +4,32 @@ export function PageHero({ eyebrow, title, children }: { eyebrow: string; title:
   return <header className="page-hero shell"><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{children}</p></header>;
 }
 
+
+export function Breadcrumbs({ items }: { items: Array<{ href?: string; label: string }> }) {
+  return (
+    <nav className="breadcrumbs shell" aria-label="Breadcrumb">
+      <ol>
+        {items.map((item, index) => (
+          <li key={`${item.label}-${index}`}>
+            {item.href ? <Link href={item.href}>{item.label}</Link> : <span aria-current="page">{item.label}</span>}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+export function BackToTop() {
+  return <a className="back-to-top" href="#top" aria-label="Back to top">↑</a>;
+}
+
+export function SectionNav({ links }: { links: Array<{ href: string; label: string }> }) {
+  return (
+    <nav className="section-nav shell" aria-label="Page sections">
+      {links.map((link) => <Link key={link.href} href={link.href}>{link.label}</Link>)}
+    </nav>
+  );
+}
 export function DiagnosticCta() {
   return (
     <section className="diagnostic-band">
@@ -26,10 +52,13 @@ export function DiagnosticCta() {
             Investment is confirmed after a discovery conversation based on organizational complexity,
             stakeholders, and the operating areas being assessed.
           </p>
-          <p><Link className="nav-cta" href="/assessment">Take the assessment</Link></p>
-          <Link className="button" href="/diagnostic">Review the assessment →</Link>
+          <p><Link className="button" href="/assessment">Take the Assessment</Link></p>
+          <Link className="button" href="/diagnostic">Review the assessment â†’</Link>
         </div>
       </div>
     </section>
   );
 }
+
+
+

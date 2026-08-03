@@ -35,8 +35,13 @@ export default function Home() {
             operational friction with practical systems and automation.
           </p>
           <div className="actions">
-            <Link className="button" href="/diagnostic">Review the Diagnostic →</Link>
-            <Link className="button secondary" href="/contact">Discuss your business dependency</Link>
+            <Link className="button" href="/assessment">Take the Assessment</Link>
+            <Link className="button secondary" href="/diagnostic">Review the Diagnostic</Link>
+          </div>
+          <div className="signal-strip" aria-label="RunRate engagement pathway">
+            <div className="signal-card"><strong>5 minutes</strong><span>Start with a directional Business Independence Assessment.</span></div>
+            <div className="signal-card"><strong>10 business days</strong><span>Validate dependency, cost, and operating constraints through the Diagnostic.</span></div>
+            <div className="signal-card"><strong>90 days</strong><span>Leave with a prioritized plan for reducing owner involvement.</span></div>
           </div>
         </div>
         <aside className="decision-margin" aria-label="Decision Margin">
@@ -93,7 +98,7 @@ export default function Home() {
       <section className="section shell">
         <div className="section-head">
           <div><div className="eyebrow">Insights</div><h2>Start with the pressure point.</h2></div>
-          <Link href="/founder-resources">View all insights →</Link>
+          <Link href="/founder-resources">View all insights â†’</Link>
         </div>
         <div className="resource-grid">
           {resources.slice(0, 3).map((resource) => (
@@ -108,3 +113,7 @@ export default function Home() {
     </>
   );
 }
+
+
+
+

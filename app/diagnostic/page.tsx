@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PageHero } from "../../components/SiteParts";
+import { Breadcrumbs, PageHero, SectionNav } from "../../components/SiteParts";
 
 export const metadata = {
   title: "Business Independence Diagnostic",
@@ -17,6 +17,7 @@ const costAreas = [
 export default function Diagnostic() {
   return (
     <>
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { label: "Business Independence Diagnostic" }]} />
       <PageHero
         eyebrow="Focused executive assessment"
         title="In two weeks, identify where your business still depends on you."
@@ -24,6 +25,7 @@ export default function Diagnostic() {
         Estimate the operational cost of that dependency and leave with a prioritized plan for reducing
         owner involvement. The work does not begin with a software or AI recommendation.
       </PageHero>
+      <SectionNav links={[{ href: "#fit", label: "Fit" }, { href: "#examine", label: "What we examine" }, { href: "#receive", label: "What you receive" }, { href: "#investment", label: "Investment" }]} />
 
       <div className="content shell">
         <div className="callout">
@@ -35,16 +37,16 @@ export default function Diagnostic() {
           </p>
         </div>
 
-        <h2>Designed for observable operating complexity</h2>
+        <h2 id="fit">Designed for observable operating complexity</h2>
         <ul>
-          <li>Owner-led B2B businesses, typically with approximately 20–100 employees and multiple managers.</li>
+          <li>Owner-led B2B businesses, typically with approximately 20 to 100 employees and multiple managers.</li>
           <li>Recurring decisions still escalate to the owner despite an established leadership team.</li>
           <li>Reporting is assembled manually, arrives late, or produces competing versions of performance.</li>
           <li>Critical knowledge, relationships, or approvals remain concentrated in the owner.</li>
           <li>Leadership is prepared to change decision rights, accountability, and operating cadence.</li>
         </ul>
 
-        <h2>What we examine</h2>
+        <h2 id="examine">What we examine</h2>
         <div className="process-grid">
           {["Executive information and KPIs", "Critical workflows and handoffs", "Decision, ownership, and escalation paths"].map((item, index) => (
             <div className="process-step" key={item}>
@@ -68,7 +70,12 @@ export default function Diagnostic() {
           ))}
         </div>
 
-        <h2>What you receive</h2>
+        <h2 id="receive">What you receive</h2>
+        <div className="signal-strip" aria-label="Diagnostic deliverables">
+          <div className="signal-card"><strong>Dependency map</strong><span>Where decisions, knowledge, approvals, and relationships still return to the owner.</span></div>
+          <div className="signal-card"><strong>Cost view</strong><span>A defensible estimate with assumptions and confidence clearly stated.</span></div>
+          <div className="signal-card"><strong>90-day plan</strong><span>The highest-impact changes to reduce owner involvement without starting with software.</span></div>
+        </div>
         <ul>
           <li>Business Dependency Scorecard and executive dependency map</li>
           <li>Operational-cost estimate with assumptions made explicit</li>
@@ -103,7 +110,7 @@ export default function Diagnostic() {
           </div>
         </div>
 
-        <div className="investment">
+        <div className="investment" id="investment">
           <div className="eyebrow">Investment</div>
           <h2>Scoped to the operating complexity, not a public price anchor.</h2>
           <p>
@@ -120,8 +127,10 @@ export default function Diagnostic() {
           <h3>Is this an AI implementation?</h3>
           <p>Not by default. AI or automation is applied only where the workflow is clear and the business case is defensible.</p>
         </div>
-        <Link className="button" href="/contact">Discuss your business dependency →</Link>
+        <Link className="button" href="/contact">Discuss your business dependency</Link>
       </div>
     </>
   );
 }
+
+

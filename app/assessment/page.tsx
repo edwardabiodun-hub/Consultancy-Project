@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Breadcrumbs } from "../../components/SiteParts";
 import { AssessmentFlow } from "./AssessmentFlow";
 import "./assessment.css";
 
@@ -9,5 +10,11 @@ export const metadata: Metadata = {
 };
 
 export default function AssessmentPage() {
-  return <AssessmentFlow />;
+  return (
+    <>
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { label: "Business Independence Assessment" }]} />
+      <AssessmentFlow />
+    </>
+  );
 }
+

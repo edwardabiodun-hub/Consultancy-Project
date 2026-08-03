@@ -1,4 +1,4 @@
-import { DiagnosticCta, PageHero } from "../../components/SiteParts";
+import { Breadcrumbs, DiagnosticCta, PageHero, SectionNav } from "../../components/SiteParts";
 
 export const metadata = {
   title: "Business Outcomes",
@@ -32,19 +32,21 @@ const outcomes = [
 export default function HowIHelp() {
   return (
     <>
+      <Breadcrumbs items={[{ href: "/", label: "Home" }, { label: "How I Help" }]} />
       <PageHero eyebrow="Business outcomes" title="Solve the operating problem before selecting the technology.">
         The work is organized around the change leaders need: less owner dependency, clearer executive
         decisions, and fewer manual operations.
       </PageHero>
+      <SectionNav links={[{ href: "#dependency", label: "Owner dependency" }, { href: "#decisions", label: "Executive decisions" }, { href: "#automation", label: "Manual operations" }]} />
       <div className="content shell">
         {outcomes.map((outcome) => (
           <section className="category" id={outcome.id} key={outcome.id}>
             <div className="eyebrow">Business outcome</div>
             <h2>{outcome.title}</h2>
             <div className="process-grid">
-              <div className="process-step"><h3>The leadership problem</h3><p>{outcome.problem}</p></div>
-              <div className="process-step"><h3>The intervention</h3><p>{outcome.work}</p></div>
-              <div className="process-step"><h3>The operating result</h3><p>{outcome.outcome}</p></div>
+              <div className="process-step outcome-card"><h3>The leadership problem</h3><p>{outcome.problem}</p></div>
+              <div className="process-step outcome-card"><h3>The intervention</h3><p>{outcome.work}</p></div>
+              <div className="process-step outcome-card"><h3>The operating result</h3><p>{outcome.outcome}</p></div>
             </div>
           </section>
         ))}
@@ -61,3 +63,4 @@ export default function HowIHelp() {
     </>
   );
 }
+
