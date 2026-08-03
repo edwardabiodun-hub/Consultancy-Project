@@ -32,14 +32,45 @@ export default async function ResourcePage({ params }: { params: Promise<{ slug:
       {article ? (
         article.blocks.map((block, index) => {
           if (block.kind === "heading") return <h2 key={index}>{block.text}</h2>;
-          if (block.kind === "quote") return <blockquote key={index}>{block.text}</blockquote>;
-          if (block.kind === "callout") return <div className="callout" key={index}><strong>{block.text}</strong></div>;
+          if (block.kind === "quote") return <blockquote className="resource-quote" key={index}>{block.text}</blockquote>;
+          if (block.kind === "divider") return <hr className="resource-divider" key={index} />;
+          if (block.kind === "callout") {
+            return (
+              <aside className={`resource-callout ${block.tone ?? "takeaway"}`} key={index}>
+                <div className="resource-callout-label">{block.label}</div>
+                <p>{block.text}</p>
+              </aside>
+            );
+          }
+          if (block.kind === "table") {
+            return (
+              <div className="resource-table-wrap" key={index}>
+                <table className="resource-table">
+                  <thead>
+                    <tr>{block.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row) => (
+                      <tr key={row.join("|")}>{row.map((cell) => <td key={cell}>{cell}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          }
           if (block.kind === "image") {
             return (
               <figure className="resource-figure" key={index}>
                 <img src={block.src} alt={block.alt} loading="lazy" />
                 <figcaption>{block.caption}</figcaption>
               </figure>
+            );
+          }
+          if (block.kind === "leadList") {
+            return (
+              <ul className="resource-lead-list" key={index}>
+                {block.items.map((item) => <li key={item.lead}><strong>{item.lead}:</strong> {item.text}</li>)}
+              </ul>
             );
           }
           if (block.kind === "list") {

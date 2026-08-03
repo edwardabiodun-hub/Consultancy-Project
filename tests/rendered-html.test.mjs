@@ -231,6 +231,9 @@ test("insight Explore links render the provided article and guide drafts", async
   assert.match(executiveHtml, /The executive reporting trap/i);
   assert.match(executiveHtml, /Last-Minute Assembly Tax/i);
   assert.match(executiveHtml, /Build an automated truth engine/i);
+  assert.match(executiveHtml, /Executive rule/i);
+  assert.match(executiveHtml, /Historical reporting/i);
+  assert.match(executiveHtml, /Decision-driven reporting/i);
   assert.match(executiveHtml, /\/insights\/stuck-in-reporting-trap\.png/);
   assert.match(executiveHtml, /\/insights\/rearview-mirror-management\.png/);
   assert.match(executiveHtml, /\/insights\/signal-or-management-noise\.png/);
@@ -242,6 +245,10 @@ test("insight Explore links render the provided article and guide drafts", async
   assert.match(automationHtml, /The automation trap/i);
   assert.match(automationHtml, /The pre-automation blueprint/i);
   assert.match(automationHtml, /Technology scales process quality/i);
+  assert.match(automationHtml, /Operational warning/i);
+  assert.match(automationHtml, /Weak sequence/i);
+  assert.match(automationHtml, /Stronger sequence/i);
+  assert.match(automationHtml, /Map the real workflow/i);
   assert.match(automationHtml, /\/insights\/hidden-sources-operational-friction\.png/);
   assert.match(automationHtml, /\/insights\/pre-automation-blueprint\.png/);
   assert.match(automationHtml, /\/insights\/where-practical-ai-creates-value\.png/);
