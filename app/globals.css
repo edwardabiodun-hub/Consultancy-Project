@@ -42,3 +42,5 @@ footer :is(a, button, input, select, textarea):focus-visible,
 @media(max-width:900px){.site-header{position:sticky}.nav-menu-panel{left:0;right:auto}.signal-strip{grid-template-columns:1fr}.back-to-top{right:16px;bottom:16px;width:40px;height:40px}.section-nav{margin-top:0}.outcome-card h3{min-height:0}}
 @media(max-width:620px){.site-header nav .nav-primary{display:inline-flex}.nav-menu{width:100%}.nav-menu-panel{position:static;min-width:0;margin-top:8px}.site-header nav>a:not(.nav-primary):not(.nav-cta){padding:7px 0}.breadcrumbs{padding-top:14px}.breadcrumbs ol{flex-wrap:wrap}.signal-strip{margin-top:22px}.back-to-top{bottom:18px}}
 
+
+.resource-video-card{background:var(--paper)}.resource-video-card h3{font-size:22px}.video-embed{position:relative;width:100%;aspect-ratio:16/9;background:#172733;border:1px solid var(--rule);overflow:hidden}.video-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}.resource-video-link{display:inline-block;margin-top:14px;font-weight:800;color:var(--forest);text-underline-offset:4px}.resource-video-feature{margin-top:30px}.resource-video-feature .button{margin-top:16px}

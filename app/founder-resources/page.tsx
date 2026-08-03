@@ -45,6 +45,27 @@ export default function Insights() {
                   <strong>Explore</strong>
                 </Link>
               ))}
+              {category.id === "run-without-you" ? (() => {
+                const featuredVideo = resources.find((resource) => resource.slug === "one-big-client-risk");
+                return featuredVideo && "youtubeEmbedUrl" in featuredVideo && featuredVideo.youtubeEmbedUrl ? (
+                  <div className="resource-card resource-video-card">
+                    <div className="meta">Featured video</div>
+                    <h3>{featuredVideo.title}</h3>
+                    <div className="video-embed" aria-label={`${featuredVideo.title} video`}>
+                      <iframe
+                        src={featuredVideo.youtubeEmbedUrl}
+                        title={featuredVideo.title}
+                        loading="lazy"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    </div>
+                    {"youtubeUrl" in featuredVideo && featuredVideo.youtubeUrl ? (
+                      <a className="resource-video-link" href={featuredVideo.youtubeUrl} target="_blank" rel="noreferrer">Watch on YouTube</a>
+                    ) : null}
+                  </div>
+                ) : null;
+              })() : null}
             </div>
           </section>
         ))}

@@ -32,6 +32,22 @@ export default async function ResourcePage({ params }: { params: Promise<{ slug:
           <h1>{resource.title}</h1>
           <p>{article?.deck ?? resource.summary}</p>
           {article ? <p className="resource-reading-time">Estimated reading time: {article.readingTime}</p> : null}
+          {"youtubeEmbedUrl" in resource && resource.youtubeEmbedUrl ? (
+            <div className="resource-video-feature">
+              <div className="video-embed" aria-label={`${resource.title} video`}>
+                <iframe
+                  src={resource.youtubeEmbedUrl}
+                  title={resource.title}
+                  loading="lazy"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+              {"youtubeUrl" in resource && resource.youtubeUrl ? (
+                <a className="button secondary" href={resource.youtubeUrl} target="_blank" rel="noreferrer">Watch on YouTube</a>
+              ) : null}
+            </div>
+          ) : null}
         </header>
 
         {headings.length > 0 ? (
