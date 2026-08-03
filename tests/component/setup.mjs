@@ -6,9 +6,11 @@ const dom = new JSDOM("<!doctype html><html><body></body></html>", {
 
 for (const property of [
   "window",
+  "self",
   "document",
   "navigator",
   "HTMLElement",
+  "HTMLDetailsElement",
   "HTMLInputElement",
   "HTMLSelectElement",
   "Node",

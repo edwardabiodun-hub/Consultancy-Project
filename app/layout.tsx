@@ -3,6 +3,7 @@ import { Space_Grotesk } from "next/font/google";
 import Link from "next/link";
 import { BackToTop } from "../components/SiteParts";
 import { Logo } from "../components/Logo";
+import { NavMenu } from "../components/NavMenu";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -48,12 +49,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <header className="site-header">
           <Logo />
           <nav aria-label="Primary navigation">
-            <details className="nav-menu">
-              <summary>How I Help</summary>
-              <div className="nav-menu-panel">
-                {outcomeNav.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
-              </div>
-            </details>
+            <NavMenu label="How I Help" links={outcomeNav} />
             {primaryNav.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
             <Link className="nav-primary" href="/assessment">Take the Assessment</Link>
             <Link className="nav-cta" href="/contact">Start a Conversation</Link>
